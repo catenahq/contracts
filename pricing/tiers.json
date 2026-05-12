@@ -1,0 +1,22 @@
+{
+  "tiers": [
+    {
+      "id": "small",
+      "displayName": { "en": "Small", "fr": "Petit" },
+      "monthlyPriceCents": 0,
+      "stripePriceId": null
+    },
+    {
+      "id": "medium",
+      "displayName": { "en": "Medium", "fr": "Moyen" },
+      "monthlyPriceCents": 0,
+      "stripePriceId": null
+    },
+    {
+      "id": "large",
+      "displayName": { "en": "Large", "fr": "Grand" },
+      "monthlyPriceCents": 0,
+      "stripePriceId": null
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+# catenahq/contracts
+
+Single source of truth for everything that more than one catena repo
+depends on. Each artifact here is a versioned contract; consumers
+pin a tag (or a git SHA) and bump it deliberately. Drift between
+repos is now a code review concern, not an invisible regression.
+
+## What lives here
+
+| Directory | Contract | Primary consumers |
+|-----------|----------|-------------------|
+| `brand/`  | Design tokens (CSS variables + JS exports) + Conthrax helper | catenahq/website, catenahq/docs, catenahq/portal |
+| `pricing/`| Managed-tier metadata: id, display name (EN+FR), monthly price cents, Stripe price id | catenahq/portal (UI + billing), catenahq/website (pricing page), catenahq/ops (installer prompts) |
+| `legal/`  | MSA commit pin (terms_version) + effective date + published URL | catenahq/portal (terms_version column), catenahq/website (/legal page anchor) |
+
+Add a new directory whenever a fact lives in more than one repo. Do
+NOT add app-specific copy, operator-only configuration, or anything
+under active iteration that doesn't have a stable shape yet -- those
+belong in the consuming repo until they stabilize.
+
+## How consumers depend on it
+
+Each consumer adds the dep to its `package.json`:
+
+```json
+{
+  "dependencies": {
+    "@catenahq/contracts": "github:catenahq/contracts#v0.1.0"
+  }
+}
+```
+
+Tagged releases are the unit of bump. Renovate (or Dependabot) opens
+PRs against each consumer when a new tag lands. For local
+development against an unreleased change, override via npm overrides
+or by symlinking.
+
+Direct file imports:
+
+```js
+import tiers from "@catenahq/contracts/pricing/tiers.json";
+import { breakpoints, minWidth, accent } from "@catenahq/contracts/brand";
+import msa from "@catenahq/contracts/legal/msa.json";
+```
+
+CSS:
+
+```css
+@import "@catenahq/contracts/brand/tokens/all.css";
+```
+
+## How to bump a contract
+
+1. Open a PR against this repo.
+2. Update the relevant artifact (e.g. `pricing/tiers.json`).
+3. CI validates JSON parses and `brand/test.js` still passes.
+4. Merge to main.
+5. Tag `vX.Y.Z` (semver: bump major if shape changes, minor for new
+   keys, patch for value-only bumps).
+6. Each consumer gets a PR from Renovate/Dependabot to bump the dep.
+7. Reviewer in each consumer repo confirms the new contract is
+   consumed correctly (e.g. portal's tier rendering matches the new
+   `tiers.json`).
+
+## What does NOT live here
+
+- App-specific copy or layout. Per-app strings stay in each app's
+  own `src/i18n/`.
+- Secrets, env vars, deployment configuration. Those live in
+  catenahq/ops.
+- Stripe / Keycloak / Cloudflare API keys. Same as above.
+- Backlog, runbooks, or any prose that is documentation rather
+  than data.
+
+## LICENSE
+
+Pick a license before the first public push. Recommended: CC BY 4.0
+(matches the existing license precedent on catenahq/docs +
+catenahq/website for brand-adjacent material). AGPL or MIT also
+defensible.
+
+## Repo split status
+
+This is the 5th repo in the catenahq split (alongside ops, website,
+docs, portal). Origin commit lands once `package.json` + initial
+content is reviewed. See catenahq/ops
+`internal_docs/operator/repo-split-runbook.md` for the broader
+context.

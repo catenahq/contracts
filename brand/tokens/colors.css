@@ -1,0 +1,69 @@
+/* @catena/brand -- color tokens
+ *
+ * Single accent swap point: --catena-accent. Every other variable
+ * derives from it (or is neutral). To rebrand for a fork or
+ * white-label, override this one variable in :root and re-test.
+ *
+ * Palette is blue-led (matches the "trusted infrastructure"
+ * positioning: serious, technical, not a startup pastel). Designed
+ * for AA contrast on white backgrounds.
+ */
+
+:root {
+  /* The swap point. Change this and the rest follows. */
+  --catena-accent: #1e5fb6;
+
+  /* Primary palette -- accent + supporting neutrals. */
+  --catena-primary-50: #eef4fb;
+  --catena-primary-100: #d3e2f4;
+  --catena-primary-200: #a7c5e9;
+  --catena-primary-300: #7aa9de;
+  --catena-primary-400: #4e8cd2;
+  --catena-primary-500: var(--catena-accent);
+  --catena-primary-600: #1a4f97;
+  --catena-primary-700: #154078;
+  --catena-primary-800: #103159;
+  --catena-primary-900: #0b223b;
+
+  /* Neutrals. Warm-cool balanced for prose readability. */
+  --catena-neutral-0:   #ffffff;
+  --catena-neutral-50:  #f7f8fa;
+  --catena-neutral-100: #eef0f3;
+  --catena-neutral-200: #d9dde3;
+  --catena-neutral-300: #b9bfc8;
+  --catena-neutral-400: #8d96a3;
+  --catena-neutral-500: #6b7484;
+  --catena-neutral-600: #4f5763;
+  --catena-neutral-700: #383e48;
+  --catena-neutral-800: #232830;
+  --catena-neutral-900: #131720;
+
+  /* Status colors -- pulled toward the cool end so they don't fight
+     the blue accent. */
+  --catena-success: #1e8a4f;
+  --catena-warning: #b8730a;
+  --catena-danger:  #b8281d;
+  --catena-info:    var(--catena-primary-500);
+
+  /* Surfaces (semantic, intentionally a small set). */
+  --catena-surface-bg:       var(--catena-neutral-0);
+  --catena-surface-bg-muted: var(--catena-neutral-50);
+  --catena-surface-fg:       var(--catena-neutral-900);
+  --catena-surface-fg-muted: var(--catena-neutral-600);
+  --catena-surface-border:   var(--catena-neutral-200);
+  --catena-link:             var(--catena-primary-600);
+  --catena-link-hover:       var(--catena-primary-700);
+}
+
+/* Dark scheme: mirror, not invert. Same accent, neutrals slid down. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --catena-surface-bg:       var(--catena-neutral-900);
+    --catena-surface-bg-muted: var(--catena-neutral-800);
+    --catena-surface-fg:       var(--catena-neutral-50);
+    --catena-surface-fg-muted: var(--catena-neutral-300);
+    --catena-surface-border:   var(--catena-neutral-700);
+    --catena-link:             var(--catena-primary-300);
+    --catena-link-hover:       var(--catena-primary-200);
+  }
+}

@@ -1,0 +1,45 @@
+/* @catena/brand -- spacing + radius tokens
+ *
+ * 4px grid. Every spacing variable is a multiple of --catena-space-1.
+ * Tailwind-compatible names so the variables drop into a Tailwind
+ * config (apps/portal) without mental remap.
+ */
+
+:root {
+  --catena-space-0:   0;
+  --catena-space-px:  1px;
+  --catena-space-0_5: 0.125rem;  /* 2px  */
+  --catena-space-1:   0.25rem;   /* 4px  */
+  --catena-space-2:   0.5rem;    /* 8px  */
+  --catena-space-3:   0.75rem;   /* 12px */
+  --catena-space-4:   1rem;      /* 16px */
+  --catena-space-5:   1.25rem;   /* 20px */
+  --catena-space-6:   1.5rem;    /* 24px */
+  --catena-space-8:   2rem;      /* 32px */
+  --catena-space-10:  2.5rem;    /* 40px */
+  --catena-space-12:  3rem;      /* 48px */
+  --catena-space-16:  4rem;      /* 64px */
+  --catena-space-20:  5rem;      /* 80px */
+  --catena-space-24:  6rem;      /* 96px */
+  --catena-space-32:  8rem;      /* 128px */
+
+  /* Radii -- restrained. Two only: subtle (inputs, cards) + pill. */
+  --catena-radius-sm:   0.25rem;   /* 4px  */
+  --catena-radius-md:   0.5rem;    /* 8px  */
+  --catena-radius-lg:   0.75rem;   /* 12px */
+  --catena-radius-pill: 9999px;
+
+  /* Shadows -- one elevation scale. Cool/blue-tinted, not pure
+     black, so they sit on the brand. */
+  --catena-shadow-sm: 0 1px 2px 0 rgba(19, 23, 32, 0.06);
+  --catena-shadow-md: 0 4px 12px -2px rgba(19, 23, 32, 0.1),
+                     0 2px 4px -2px rgba(19, 23, 32, 0.06);
+  --catena-shadow-lg: 0 10px 30px -6px rgba(19, 23, 32, 0.15),
+                     0 4px 8px -3px rgba(19, 23, 32, 0.08);
+
+  /* Layout maxima -- prose width + page width. */
+  --catena-content-prose: 65ch;       /* long-form reading */
+  --catena-content-narrow: 48rem;     /* 768px -- sidebars, forms */
+  --catena-content-default: 72rem;    /* 1152px -- standard page */
+  --catena-content-wide: 90rem;       /* 1440px -- marketing hero */
+}

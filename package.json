@@ -1,0 +1,26 @@
+{
+  "name": "@catenahq/contracts",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Shared contracts for the catena repos: brand tokens, pricing tier metadata, legal MSA pin. Consumers pin a tag and bump deliberately.",
+  "type": "module",
+  "exports": {
+    "./brand": "./brand/src/index.js",
+    "./brand/tokens/*": "./brand/tokens/*",
+    "./pricing/tiers.json": "./pricing/tiers.json",
+    "./legal/msa.json": "./legal/msa.json"
+  },
+  "files": [
+    "brand",
+    "pricing",
+    "legal"
+  ],
+  "scripts": {
+    "test": "node brand/test.js && node scripts/validate-json.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/catenahq/contracts.git"
+  },
+  "license": "SEE LICENSE IN LICENSE"
+}

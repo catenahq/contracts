@@ -1,0 +1,26 @@
+name: CI
+
+# Validates every artifact in this repo:
+#   - JSON files parse
+#   - brand/test.js smoke test passes
+#   - JSON files match their documented shape (basic key presence
+#     + types; full schema validation is a follow-up)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    name: Validate contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run brand smoke test
+        run: node brand/test.js
+      - name: Validate JSON artifacts
+        run: node scripts/validate-json.mjs
