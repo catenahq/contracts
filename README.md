@@ -53,14 +53,31 @@ CSS:
 
 1. Open a PR against this repo.
 2. Update the relevant artifact (e.g. `pricing/tiers.json`).
-3. CI validates JSON parses and `brand/test.js` still passes.
-4. Merge to main.
-5. Tag `vX.Y.Z` (semver: bump major if shape changes, minor for new
-   keys, patch for value-only bumps).
-6. Each consumer gets a PR from Renovate/Dependabot to bump the dep.
-7. Reviewer in each consumer repo confirms the new contract is
+3. Bump `version` in `package.json` to the next semver:
+   - major if any shape changes (breaking)
+   - minor for new keys / new files
+   - patch for value-only bumps
+4. CI validates JSON parses and `brand/test.js` still passes.
+5. Merge to main.
+6. Tag the merge commit: `git tag -a vX.Y.Z -m "..." && git push --tags`.
+7. Each consumer's `.github/workflows/contracts-update.yml` polls
+   this repo (weekly schedule + on-demand via workflow_dispatch).
+   When it sees a new tag or a content drift, it re-packs the
+   tarball, replaces the vendored copy, and opens a "contracts:
+   bump to vX.Y.Z" PR against itself.
+8. Review + merge each consumer PR. Verify the new contract is
    consumed correctly (e.g. portal's tier rendering matches the new
    `tiers.json`).
+
+To force a bump immediately (e.g. urgent fix): go to each consumer's
+`Actions -> Check for contracts updates -> Run workflow`.
+
+Why pull-from-consumers, not push-from-contracts: a single read-only
+token (per consumer, scoped only to this repo) is a much smaller
+blast radius than a write-many token on every consumer. Consumers
+also stay in control of their own cadence -- a contracts bump that
+needs careful review of pricing/tier renaming can sit in PR review
+without blocking the contracts repo.
 
 ## What does NOT live here
 
