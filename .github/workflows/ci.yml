@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Unicode hygiene (no em dashes / smart quotes / decorative symbols)
+        run: node scripts/check-unicode.mjs
       - name: Run brand smoke test
         run: node brand/test.js
       - name: Validate JSON artifacts

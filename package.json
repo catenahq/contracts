@@ -17,7 +17,8 @@
     "legal"
   ],
   "scripts": {
-    "test": "node brand/test.js && node scripts/validate-json.mjs"
+    "test": "node brand/test.js && node scripts/validate-json.mjs",
+    "check:unicode": "node scripts/check-unicode.mjs"
   },
   "repository": {
     "type": "git",

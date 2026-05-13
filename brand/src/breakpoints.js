@@ -2,8 +2,10 @@
  *
  * Mobile-first. Use these for `@media (min-width: ...)` queries in
  * JS-driven contexts (matchMedia, useMediaQuery hooks). The same
- * pixel values are mirrored in Tailwind config in apps/portal so a
- * change here doesn't drift from the CSS side.
+ * pixel values are mirrored in each consuming repo's Tailwind config
+ * (catenahq/portal in particular) so a change here doesn't drift
+ * from the CSS side. Bump the contracts package after editing here
+ * and run the consumer freshness gate before merging.
  */
 
 export const breakpoints = {

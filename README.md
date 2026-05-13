@@ -105,7 +105,6 @@ defensible.
 ## Repo split status
 
 This is the 5th repo in the catenahq split (alongside ops, website,
-docs, portal). Origin commit lands once `package.json` + initial
-content is reviewed. See catenahq/ops
-`internal_docs/operator/repo-split-runbook.md` for the broader
-context.
+docs, portal). The split executed on 2026-05-13. Broader context
+lives in the catenahq/ops repo under
+`internal_docs/operator/repo-split-runbook.md` (operator-only).

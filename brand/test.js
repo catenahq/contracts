@@ -1,7 +1,7 @@
 // Smoke test: ensure the package resolves + exports the expected
-// shape. Run with `node packages/brand/test.js`. Will be replaced
-// by an apps-level Vitest suite once an app actually consumes
-// @catena/brand.
+// shape. Run with `node brand/test.js` from this repo root (also
+// wired as the `npm test` entry). Will be replaced by a Vitest
+// suite once the test surface grows past this file.
 import { breakpoints, minWidth, accent, baseFontSize } from "./src/index.js";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
