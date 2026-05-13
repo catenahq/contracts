@@ -107,4 +107,5 @@ defensible.
 This is the 5th repo in the catenahq split (alongside ops, website,
 docs, portal). The split executed on 2026-05-13. Broader context
 lives in the catenahq/ops repo under
-`internal_docs/operator/repo-split-runbook.md` (operator-only).
+`internal_docs/archive/repo-split-runbook.md` (operator-only,
+archived after execution).
