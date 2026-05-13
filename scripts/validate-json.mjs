@@ -40,13 +40,45 @@ function ok(file) {
 }
 
 function validateTiersJson(file, data) {
-  if (!Array.isArray(data.tiers)) return fail(file, "missing `tiers` array");
+  const topLevelKeys = [
+    "currency",
+    "supportHourlyRateCents",
+    "supportIncrementMinutes",
+    "perExtraAppMonthlyCents",
+    "customTemplateSetupCents",
+    "earlyTerminationFeeMultiplier",
+    "tiers",
+  ];
+  for (const key of topLevelKeys) {
+    if (!(key in data)) return fail(file, `missing top-level ${key}`);
+  }
+  if (data.currency !== "CAD") return fail(file, `currency must be "CAD", got: ${data.currency}`);
+  if (!Array.isArray(data.tiers)) return fail(file, "`tiers` must be an array");
   for (const [i, t] of data.tiers.entries()) {
-    for (const key of ["id", "monthlyPriceCents", "displayName"]) {
+    const required = [
+      "id", "kind", "displayName", "tagline",
+      "oneTimePriceCents", "monthlyPriceCents",
+      "supportHoursIncluded", "stripePriceId",
+    ];
+    for (const key of required) {
       if (!(key in t)) return fail(file, `tier[${i}] missing ${key}`);
     }
-    for (const locale of ["en", "fr"]) {
-      if (!(locale in t.displayName)) return fail(file, `tier[${i}].displayName missing ${locale}`);
+    if (t.kind !== "one_time" && t.kind !== "recurring") {
+      return fail(file, `tier[${i}].kind must be "one_time" or "recurring", got: ${t.kind}`);
+    }
+    for (const bi of ["displayName", "tagline"]) {
+      for (const locale of ["en", "fr"]) {
+        if (!(locale in t[bi])) return fail(file, `tier[${i}].${bi} missing ${locale}`);
+      }
+    }
+    if (t.kind === "recurring") {
+      for (const key of ["employeeCap", "minimumCommitmentMonths"]) {
+        if (!(key in t)) return fail(file, `tier[${i}] (recurring) missing ${key}`);
+      }
+      if (t.monthlyPriceCents <= 0) return fail(file, `tier[${i}] (recurring) monthlyPriceCents must be > 0`);
+    }
+    if (t.kind === "one_time" && t.oneTimePriceCents <= 0) {
+      return fail(file, `tier[${i}] (one_time) oneTimePriceCents must be > 0`);
     }
   }
   ok(file);

@@ -1,18 +1,21 @@
 # pricing/
 
-Managed-tier metadata: tier id, bilingual display name, monthly
-price (in CAD cents), and the Stripe price id that materializes the
-subscription item. One row per tier.
+Managed-tier metadata: per-tier id, bilingual display name + tagline,
+prices (one-time + monthly), Stripe price id, support hours included,
+employee cap, minimum commitment. Plus operator-wide pricing knobs
+(hourly support rate, per-extra-app, custom-template setup, ETF
+multiplier).
 
 Consumers:
 
-- **catenahq/portal**: renders the order form's tier picker
-  (`OrderForm.tsx`), creates the Stripe Subscription on install
-  success (`stripe_charges.ts`).
+- **catenahq/portal**: renders the order form's tier picker, drives
+  Stripe authorize-at-submit (one-time tiers) + Subscription
+  creation on install success (recurring tiers), enforces the
+  minimum commitment via ETF on cancel-before-month-N.
 - **catenahq/website**: renders `/pricing` (FR + EN) and the
   SaaS-cost calculator widget when M7 ships.
-- **catenahq/ops**: the installer prompts (`automation/menu/flows.py`)
-  read tier id to scope sizing + backup retention.
+- **catenahq/ops**: the installer prompts read tier id to scope
+  sizing + backup retention.
 
 ## Schema
 
@@ -20,12 +23,25 @@ Consumers:
 
 ```json
 {
+  "currency": "CAD",
+  "supportHourlyRateCents": <int>,
+  "supportIncrementMinutes": <int>,
+  "perExtraAppMonthlyCents": <int>,
+  "customTemplateSetupCents": <int>,
+  "earlyTerminationFeeMultiplier": <float, 0..1>,
   "tiers": [
     {
       "id": "<kebab-case-stable-id>",
-      "displayName": { "en": "<EN display name>", "fr": "<FR display name>" },
-      "monthlyPriceCents": <integer; CAD cents>,
-      "stripePriceId": "<Stripe price id, e.g. price_...>" | null
+      "kind": "one_time" | "recurring",
+      "displayName": { "en": "...", "fr": "..." },
+      "tagline":     { "en": "...", "fr": "..." },
+      "oneTimePriceCents": <int; 0 for recurring>,
+      "monthlyPriceCents": <int; 0 for one-time>,
+      "supportHoursIncluded": <int>,
+      "stripePriceId": "<Stripe price id>" | null,
+      // recurring tiers only:
+      "employeeCap": <int>,
+      "minimumCommitmentMonths": <int>
     }
   ]
 }
@@ -33,19 +49,26 @@ Consumers:
 
 - `id` is the stable key. Never rename in place -- add a new id and
   flag the old one deprecated for one release cycle, then drop.
-- `monthlyPriceCents` is integer CAD cents. No floats, no currency
-  string.
+- `kind` discriminates billing cadence:
+  - `one_time`: charge `oneTimePriceCents` at order acceptance via
+    a manual-capture PaymentIntent.
+  - `recurring`: create a Stripe Subscription at `monthlyPriceCents`
+    on install success; enforce `minimumCommitmentMonths` via an
+    early-termination-fee invoice item on cancel-before-month-N.
+- All prices are integer CAD cents. No floats, no currency string.
 - `stripePriceId` is `null` until the operator creates the Stripe
-  Product + Price. The portal fails closed (refuses to create a
-  Subscription) when `null`.
+  Product + Price. The portal fails closed (refuses to authorize /
+  create a Subscription) when null AND the relevant price > 0.
 
 TypeScript consumers import the typed view via `tiers.d.ts`.
 
 ## Bump
 
-- Price change: bump only `monthlyPriceCents` + cut a **patch** release
-  (e.g. 0.1.0 -> 0.1.1). Consumers re-pull.
-- New tier: add a row + cut a **minor** release. Consumers add UI
-  rendering in their next PR.
-- Removing a tier: deprecate first (add `deprecatedSince` field in a
-  minor release), then remove in a **major** release.
+- Price change: bump `monthlyPriceCents` / `oneTimePriceCents` +
+  cut a **patch** release. Consumers re-pull on next cron.
+- New tier, new top-level field, or new optional per-tier field:
+  cut a **minor** release. Consumers add UI rendering in their next
+  PR.
+- Shape change (renamed field, removed field, kind enum change):
+  cut a **major** release. Coordinate consumer migrations in the
+  PR description.

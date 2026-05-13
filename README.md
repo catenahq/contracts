@@ -10,8 +10,8 @@ repos is now a code review concern, not an invisible regression.
 | Directory | Contract | Primary consumers |
 |-----------|----------|-------------------|
 | `brand/`  | Design tokens (CSS variables + JS exports) + Conthrax helper | catenahq/website, catenahq/docs, catenahq/portal |
-| `pricing/`| Managed-tier metadata: id, display name (EN+FR), monthly price cents, Stripe price id | catenahq/portal (UI + billing), catenahq/website (pricing page), catenahq/ops (installer prompts) |
-| `legal/`  | MSA commit pin (terms_version) + effective date + published URL | catenahq/portal (terms_version column), catenahq/website (/legal page anchor) |
+| `pricing/`| Per-tier metadata (5 tiers, kind discriminator, support hours, employee cap, minimum commitment) + operator-wide knobs (hourly rate, per-extra-app, ETF multiplier) | catenahq/portal (UI + billing), catenahq/website (pricing page), catenahq/ops (installer prompts) |
+| `legal/`  | Canonical MSA markdown + version pin (commit SHA) + effective date + published URL | catenahq/portal (terms_version column + checkbox), catenahq/website (renders `/legal/master-agreement`) |
 
 Add a new directory whenever a fact lives in more than one repo. Do
 NOT add app-specific copy, operator-only configuration, or anything
@@ -41,7 +41,13 @@ Direct file imports:
 import tiers from "@catenahq/contracts/pricing/tiers.json";
 import { breakpoints, minWidth, accent } from "@catenahq/contracts/brand";
 import msa from "@catenahq/contracts/legal/msa.json";
+// Canonical MSA markdown -- consumed by the website via fs.readFileSync
+// (the Astro page renders it through @astrojs/markdown-remark).
 ```
+
+The MSA markdown ships as a file under the package; consumers read
+it with `fs.readFileSync(require.resolve("@catenahq/contracts/legal/master-agreement.md"))`
+(Node) or the equivalent vite / Astro asset import.
 
 CSS:
 

@@ -1,21 +1,80 @@
 {
+  "currency": "CAD",
+  "supportHourlyRateCents": 15000,
+  "supportIncrementMinutes": 30,
+  "perExtraAppMonthlyCents": 5000,
+  "customTemplateSetupCents": 15000,
+  "earlyTerminationFeeMultiplier": 0.5,
   "tiers": [
     {
-      "id": "small",
-      "displayName": { "en": "Small", "fr": "Petit" },
+      "id": "base",
+      "kind": "one_time",
+      "displayName": { "en": "Base installer", "fr": "Installation initiale" },
+      "tagline": {
+        "en": "Bring your own keys; portal-driven self-serve install.",
+        "fr": "Apportez vos propres cles; installation libre-service via le portail client."
+      },
+      "oneTimePriceCents": 20000,
       "monthlyPriceCents": 0,
+      "supportHoursIncluded": 0,
+      "stripePriceId": null
+    },
+    {
+      "id": "assisted",
+      "kind": "one_time",
+      "displayName": { "en": "Assisted", "fr": "Accompagnement" },
+      "tagline": {
+        "en": "Base + a 1-hour onboarding call to walk you through provider account creation.",
+        "fr": "Base + un appel d'onboarding d'une heure pour vous guider a travers la creation des comptes fournisseurs."
+      },
+      "oneTimePriceCents": 30000,
+      "monthlyPriceCents": 0,
+      "supportHoursIncluded": 0,
+      "stripePriceId": null
+    },
+    {
+      "id": "small",
+      "kind": "recurring",
+      "displayName": { "en": "Small business", "fr": "Petite entreprise" },
+      "tagline": {
+        "en": "Up to 10 employees.",
+        "fr": "Jusqu'a 10 employes."
+      },
+      "oneTimePriceCents": 0,
+      "monthlyPriceCents": 50000,
+      "supportHoursIncluded": 2,
+      "employeeCap": 10,
+      "minimumCommitmentMonths": 6,
       "stripePriceId": null
     },
     {
       "id": "medium",
-      "displayName": { "en": "Medium", "fr": "Moyen" },
-      "monthlyPriceCents": 0,
+      "kind": "recurring",
+      "displayName": { "en": "Medium business", "fr": "Moyenne entreprise" },
+      "tagline": {
+        "en": "Up to 25 employees.",
+        "fr": "Jusqu'a 25 employes."
+      },
+      "oneTimePriceCents": 0,
+      "monthlyPriceCents": 95000,
+      "supportHoursIncluded": 5,
+      "employeeCap": 25,
+      "minimumCommitmentMonths": 6,
       "stripePriceId": null
     },
     {
       "id": "large",
-      "displayName": { "en": "Large", "fr": "Grand" },
-      "monthlyPriceCents": 0,
+      "kind": "recurring",
+      "displayName": { "en": "Large business", "fr": "Grande entreprise" },
+      "tagline": {
+        "en": "Up to 50 employees.",
+        "fr": "Jusqu'a 50 employes."
+      },
+      "oneTimePriceCents": 0,
+      "monthlyPriceCents": 160000,
+      "supportHoursIncluded": 10,
+      "employeeCap": 50,
+      "minimumCommitmentMonths": 6,
       "stripePriceId": null
     }
   ]
