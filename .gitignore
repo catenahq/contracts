@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# npm pack output. Tarballs live in consumer repos' vendor/ dirs,
+# never in this repo. Keep ignored so a stray pack does not leak.
+*.tgz
+
 .DS_Store
 .idea/
 .vscode/
