@@ -1,12 +1,23 @@
 # legal/
 
-Canonical Master Services Agreement: the binding text itself plus
-the version pin that ties each client acceptance row to a specific
-revision.
+Canonical commercial-agreement texts. Every file here is referenced
+by an executed Master Services Agreement and rendered verbatim on the
+website / linked from the portal. Operator-private templates
+(acceptance-tracking, breach-response, internal DPA template, loi25
+reference material) live in catenahq/sales, NOT here.
 
 - `master-agreement.md` -- the canonical English MSA text. Single
   source of truth; rendered verbatim on the website and referenced
   from the portal's terms-acceptance checkbox.
+- `sla.md` -- Schedule A. Service Level Agreement (uptime + response
+  targets). Appended to every executed MSA.
+- `subprocessors.md` -- Schedule D. Subprocessor list disclosing the
+  third parties that may process client personal information on the
+  operator's behalf (CC-BY-4.0 / Loi 25 art. 18.3 disclosure
+  requirement).
+- `data-export-and-termination.md` -- Schedule C. Data export
+  procedure + termination effects, satisfying MSA section 6.2
+  (portability) and 9.4 (post-termination).
 - `msa.json` -- version pin (commit SHA), effective date, source +
   published URLs. The portal writes `msa.version` into
   `installations.terms_version` at order submit so each row pins to
@@ -16,10 +27,12 @@ Consumers:
 
 - **catenahq/portal**: writes `installations.terms_version` =
   `msa.version` at order submit; the OrderForm checkbox links to
-  the published URL.
+  the published URLs.
 - **catenahq/website**: renders `master-agreement.md` at
   `/legal/master-agreement` (FR + EN) with `version` +
-  `effectiveDate` in the footer.
+  `effectiveDate` in the footer. Schedules render at sibling
+  routes (`/legal/sla`, `/legal/subprocessors`,
+  `/legal/data-export-and-termination`).
 - **catenahq/ops**: when a revision lands here, opens follow-up
   PRs against the consumers.
 
