@@ -1,0 +1,24 @@
+/* @catena/brand -- Conthrax wordmark face.
+ *
+ * Single source of truth for the @font-face declaration consumed by
+ * every catena app that renders the catena wordmark. Consumers
+ * @import this file from their global stylesheet:
+ *
+ *   @import "@catenahq/contracts/brand/wordmark/conthrax.css";
+ *
+ * The url() is RELATIVE to this CSS file. When the consumer's
+ * bundler (Vite via Astro, webpack via Next, etc.) processes the
+ * import, it resolves the url against the file in node_modules and
+ * emits the OTF into the build output with a content hash. The
+ * browser fetches the fingerprinted URL from the consumer's static
+ * server. No /fonts/ URL assumption, no runtime node_modules
+ * dependency.
+ */
+
+@font-face {
+  font-family: "Conthrax";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/conthrax-semibold.otf") format("opentype");
+}

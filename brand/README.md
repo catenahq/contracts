@@ -1,13 +1,17 @@
 # brand/
 
 Catena design tokens (colors, typography, spacing, breakpoints) +
-the Conthrax wordmark helpers. Single source of truth across every
-client-facing catena repo; consumers import via the
-`@catenahq/contracts` npm dep.
+the Conthrax wordmark binary + the catena logo SVG. Single source
+of truth across every client-facing catena repo; consumers import
+via the `@catenahq/contracts` npm dep.
 
-Logo / SVG / font binary assets do NOT live here -- those belong in
-each app's `public/` because they need direct URL serving. This is
-tokens-only.
+Wordmark + logo binaries live here so the OTF / SVG cannot drift
+between consumers. Consumers resolve them through their bundler
+(Vite via Astro, webpack via Next, etc.): the bundler walks the
+`@import` / `import` from `node_modules`, copies the binary into
+the consumer's build output with a content hash, and rewrites the
+URL. Browsers fetch the fingerprinted path from the consumer's
+static server -- no runtime `node_modules` dependency.
 
 ## Layout
 
@@ -18,6 +22,11 @@ brand/
     typography.css   font stacks, type scale, line heights, weights
     spacing.css      4px-grid spacing, radii, shadows, content widths
     all.css          single-import entry that pulls in the three above
+  wordmark/
+    conthrax.css     @font-face for "Conthrax", relative url() to assets/
+  assets/
+    logo.svg                catena wordmark / icon
+    conthrax-semibold.otf   wordmark font binary
   src/
     index.js         JS exports: breakpoints, minWidth, accent, baseFontSize
     breakpoints.js   breakpoints + minWidth() helper for matchMedia
@@ -40,6 +49,7 @@ In CSS:
 
 ```css
 @import "@catenahq/contracts/brand/tokens/all.css";
+@import "@catenahq/contracts/brand/wordmark/conthrax.css";  /* only if you render the wordmark */
 ```
 
 In JS:
@@ -47,6 +57,18 @@ In JS:
 ```js
 import { breakpoints, minWidth, accent } from "@catenahq/contracts/brand";
 ```
+
+The logo SVG is consumable as a build-time asset import:
+
+```js
+import logoUrl from "@catenahq/contracts/brand/assets/logo.svg";
+// logoUrl resolves to a fingerprinted path under the consumer's build output.
+```
+
+For browser-tab favicons, copy the asset into the consumer's
+`public/` at install time (see each app's `postinstall` script).
+Browsers fetch `/favicon.svg` from a fixed path, which is outside
+the bundler's URL rewrite scope.
 
 ## Swap the accent color
 
@@ -70,7 +92,9 @@ file is consumed by every app, so churn here is expensive.
 
 ## Don't add
 
-- Components (this is tokens-only).
+- Components (tokens + wordmark binary only).
 - App-specific tokens (the Stripe blue for an upgrade button is the
   app's concern).
-- Logos / SVG assets / font binaries (each app's `public/`).
+- App-specific SVGs (product screenshots, marketing illustrations,
+  per-app icons) -- each app's `public/`. Only the catena wordmark
+  + brand logo belong under `assets/`.

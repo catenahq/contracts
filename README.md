@@ -9,7 +9,7 @@ repos is now a code review concern, not an invisible regression.
 
 | Directory | Contract | Primary consumers |
 |-----------|----------|-------------------|
-| `brand/`  | Design tokens (CSS variables + JS exports) + Conthrax helper | catenahq/website, catenahq/docs, catenahq/portal |
+| `brand/`  | Design tokens (CSS variables + JS exports) + Conthrax wordmark binary + catena logo SVG | catenahq/website, catenahq/docs, catenahq/portal |
 | `pricing/`| Per-tier metadata (5 tiers, kind discriminator, support hours, employee cap, minimum commitment) + operator-wide knobs (hourly rate, per-extra-app, ETF multiplier) | catenahq/portal (UI + billing), catenahq/website (pricing page), catenahq/ops (installer prompts) |
 | `legal/`  | Canonical MSA markdown + version pin (commit SHA) + effective date + published URL | catenahq/portal (terms_version column + checkbox), catenahq/website (renders `/legal/master-agreement`) |
 
