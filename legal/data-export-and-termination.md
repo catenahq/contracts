@@ -30,14 +30,15 @@ days** of a written request, or within a longer period agreed in
 writing.
 
 1.3 The first export per calendar quarter is included in the
-Subscription Tier; additional exports may be billed at the published
-hourly rate per Master Agreement section 3.3.
+Subscription for any Suite with an active Server Subscription;
+additional exports may be billed at the published hourly rate per
+Master Agreement section 3.3.
 
 ## 2. Termination notice
 
 2.1 Either Party may terminate by giving the other **thirty (30)
 days'** written notice, after the initial six-month commitment for
-managed tiers.
+the recurring Subscription.
 
 2.2 The notice period begins on receipt of the notice and ends on
 the termination date. Service continues at the contracted level
