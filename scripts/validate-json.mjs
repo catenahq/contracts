@@ -39,48 +39,79 @@ function ok(file) {
   console.log(`  ok   ${file}`);
 }
 
+function requireKeys(file, obj, keys, where) {
+  for (const key of keys) {
+    if (!(key in obj)) return fail(file, `${where} missing ${key}`);
+  }
+  return true;
+}
+
+function requireBilingual(file, obj, where) {
+  for (const locale of ["en", "fr"]) {
+    if (!(locale in obj)) return fail(file, `${where} missing ${locale}`);
+  }
+  return true;
+}
+
 function validateTiersJson(file, data) {
   const topLevelKeys = [
     "currency",
-    "supportHourlyRateCents",
     "supportIncrementMinutes",
-    "perExtraAppMonthlyCents",
     "customTemplateSetupCents",
     "earlyTerminationFeeMultiplier",
-    "tiers",
+    "managedMinimumCommitmentMonths",
+    "alacarteHourlyCents",
+    "components",
+    "supportPacks",
+    "installers",
   ];
-  for (const key of topLevelKeys) {
-    if (!(key in data)) return fail(file, `missing top-level ${key}`);
-  }
+  if (!requireKeys(file, data, topLevelKeys, "top-level")) return;
   if (data.currency !== "CAD") return fail(file, `currency must be "CAD", got: ${data.currency}`);
-  if (!Array.isArray(data.tiers)) return fail(file, "`tiers` must be an array");
-  for (const [i, t] of data.tiers.entries()) {
-    const required = [
-      "id", "kind", "displayName", "tagline",
-      "oneTimePriceCents", "monthlyPriceCents",
-      "supportHoursIncluded", "stripePriceId",
-    ];
-    for (const key of required) {
-      if (!(key in t)) return fail(file, `tier[${i}] missing ${key}`);
-    }
-    if (t.kind !== "one_time" && t.kind !== "recurring") {
-      return fail(file, `tier[${i}].kind must be "one_time" or "recurring", got: ${t.kind}`);
-    }
-    for (const bi of ["displayName", "tagline"]) {
-      for (const locale of ["en", "fr"]) {
-        if (!(locale in t[bi])) return fail(file, `tier[${i}].${bi} missing ${locale}`);
-      }
-    }
-    if (t.kind === "recurring") {
-      for (const key of ["employeeCap", "minimumCommitmentMonths"]) {
-        if (!(key in t)) return fail(file, `tier[${i}] (recurring) missing ${key}`);
-      }
-      if (t.monthlyPriceCents <= 0) return fail(file, `tier[${i}] (recurring) monthlyPriceCents must be > 0`);
-    }
-    if (t.kind === "one_time" && t.oneTimePriceCents <= 0) {
-      return fail(file, `tier[${i}] (one_time) oneTimePriceCents must be > 0`);
+
+  // alacarteHourlyCents: { day, evening, night }
+  if (!requireKeys(file, data.alacarteHourlyCents, ["day", "evening", "night"], "alacarteHourlyCents")) return;
+  for (const k of ["day", "evening", "night"]) {
+    if (typeof data.alacarteHourlyCents[k] !== "number" || data.alacarteHourlyCents[k] <= 0) {
+      return fail(file, `alacarteHourlyCents.${k} must be a positive number`);
     }
   }
+
+  // components: server + app (both required)
+  if (!requireKeys(file, data.components, ["server", "app"], "components")) return;
+  for (const k of ["server", "app"]) {
+    const c = data.components[k];
+    if (!requireKeys(file, c, ["id", "displayName", "tagline", "monthlyPriceCents", "stripePriceId"], `components.${k}`)) return;
+    if (!requireBilingual(file, c.displayName, `components.${k}.displayName`)) return;
+    if (!requireBilingual(file, c.tagline, `components.${k}.tagline`)) return;
+    if (typeof c.monthlyPriceCents !== "number" || c.monthlyPriceCents <= 0) {
+      return fail(file, `components.${k}.monthlyPriceCents must be a positive number`);
+    }
+  }
+
+  // supportPacks: array (may be empty if à-la-carte-only)
+  if (!Array.isArray(data.supportPacks)) return fail(file, "supportPacks must be an array");
+  for (const [i, p] of data.supportPacks.entries()) {
+    if (!requireKeys(file, p, ["id", "displayName", "hours", "monthlyPriceCents", "stripePriceId"], `supportPacks[${i}]`)) return;
+    if (!requireBilingual(file, p.displayName, `supportPacks[${i}].displayName`)) return;
+    if (typeof p.hours !== "number" || p.hours <= 0) {
+      return fail(file, `supportPacks[${i}].hours must be a positive number`);
+    }
+    if (typeof p.monthlyPriceCents !== "number" || p.monthlyPriceCents <= 0) {
+      return fail(file, `supportPacks[${i}].monthlyPriceCents must be a positive number`);
+    }
+  }
+
+  // installers: array
+  if (!Array.isArray(data.installers)) return fail(file, "installers must be an array");
+  for (const [i, inst] of data.installers.entries()) {
+    if (!requireKeys(file, inst, ["id", "displayName", "tagline", "oneTimePriceCents", "stripePriceId"], `installers[${i}]`)) return;
+    if (!requireBilingual(file, inst.displayName, `installers[${i}].displayName`)) return;
+    if (!requireBilingual(file, inst.tagline, `installers[${i}].tagline`)) return;
+    if (typeof inst.oneTimePriceCents !== "number" || inst.oneTimePriceCents <= 0) {
+      return fail(file, `installers[${i}].oneTimePriceCents must be a positive number`);
+    }
+  }
+
   ok(file);
 }
 

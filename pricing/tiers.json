@@ -1,80 +1,78 @@
 {
   "currency": "CAD",
-  "supportHourlyRateCents": 15000,
-  "supportIncrementMinutes": 30,
-  "perExtraAppMonthlyCents": 5000,
+  "supportIncrementMinutes": 15,
   "customTemplateSetupCents": 15000,
   "earlyTerminationFeeMultiplier": 0.5,
-  "tiers": [
+  "managedMinimumCommitmentMonths": 6,
+  "alacarteHourlyCents": {
+    "day": 15000,
+    "evening": 22500,
+    "night": 30000
+  },
+  "components": {
+    "server": {
+      "id": "server",
+      "displayName": { "en": "Server", "fr": "Serveur" },
+      "tagline": {
+        "en": "Hardened base. Nextcloud + OnlyOffice (or Collabora) installed and managed. Drilled backups, monitoring, 4 BH response SLA.",
+        "fr": "Base durcie. Nextcloud + OnlyOffice (ou Collabora) installes et geres. Sauvegardes exercees, supervision, SLA de reponse 4 heures ouvrables."
+      },
+      "monthlyPriceCents": 40000,
+      "stripePriceId": null
+    },
+    "app": {
+      "id": "app",
+      "displayName": { "en": "App", "fr": "Application" },
+      "tagline": {
+        "en": "Per app beyond Nextcloud + OnlyOffice. Install + SSO + updates + CVE monitoring + upgrade testing.",
+        "fr": "Par application au-dela de Nextcloud + OnlyOffice. Installation + SSO + mises a jour + surveillance CVE + tests de mise a niveau."
+      },
+      "monthlyPriceCents": 10000,
+      "stripePriceId": null
+    }
+  },
+  "supportPacks": [
+    {
+      "id": "pack_5h",
+      "displayName": { "en": "5-hour support pack", "fr": "Forfait support 5 heures" },
+      "hours": 5,
+      "monthlyPriceCents": 60000,
+      "stripePriceId": null
+    },
+    {
+      "id": "pack_10h",
+      "displayName": { "en": "10-hour support pack", "fr": "Forfait support 10 heures" },
+      "hours": 10,
+      "monthlyPriceCents": 110000,
+      "stripePriceId": null
+    },
+    {
+      "id": "pack_20h",
+      "displayName": { "en": "20-hour support pack", "fr": "Forfait support 20 heures" },
+      "hours": 20,
+      "monthlyPriceCents": 200000,
+      "stripePriceId": null
+    }
+  ],
+  "installers": [
     {
       "id": "base",
-      "kind": "one_time",
       "displayName": { "en": "Base installer", "fr": "Installation initiale" },
       "tagline": {
         "en": "Bring your own keys; portal-driven self-serve install.",
         "fr": "Apportez vos propres cles; installation libre-service via le portail client."
       },
       "oneTimePriceCents": 20000,
-      "monthlyPriceCents": 0,
-      "supportHoursIncluded": 0,
       "stripePriceId": null
     },
     {
       "id": "assisted",
-      "kind": "one_time",
       "displayName": { "en": "Assisted", "fr": "Accompagnement" },
       "tagline": {
         "en": "Base + a 1-hour onboarding call to walk you through provider account creation.",
         "fr": "Base + un appel d'onboarding d'une heure pour vous guider a travers la creation des comptes fournisseurs."
       },
       "oneTimePriceCents": 30000,
-      "monthlyPriceCents": 0,
-      "supportHoursIncluded": 0,
-      "stripePriceId": null
-    },
-    {
-      "id": "small",
-      "kind": "recurring",
-      "displayName": { "en": "Small business", "fr": "Petite entreprise" },
-      "tagline": {
-        "en": "Up to 10 employees.",
-        "fr": "Jusqu'a 10 employes."
-      },
-      "oneTimePriceCents": 0,
-      "monthlyPriceCents": 50000,
-      "supportHoursIncluded": 2,
-      "employeeCap": 10,
-      "minimumCommitmentMonths": 6,
-      "stripePriceId": null
-    },
-    {
-      "id": "medium",
-      "kind": "recurring",
-      "displayName": { "en": "Medium business", "fr": "Moyenne entreprise" },
-      "tagline": {
-        "en": "Up to 25 employees.",
-        "fr": "Jusqu'a 25 employes."
-      },
-      "oneTimePriceCents": 0,
-      "monthlyPriceCents": 95000,
-      "supportHoursIncluded": 5,
-      "employeeCap": 25,
-      "minimumCommitmentMonths": 6,
-      "stripePriceId": null
-    },
-    {
-      "id": "large",
-      "kind": "recurring",
-      "displayName": { "en": "Large business", "fr": "Grande entreprise" },
-      "tagline": {
-        "en": "Up to 50 employees.",
-        "fr": "Jusqu'a 50 employes."
-      },
-      "oneTimePriceCents": 0,
-      "monthlyPriceCents": 160000,
-      "supportHoursIncluded": 10,
-      "employeeCap": 50,
-      "minimumCommitmentMonths": 6,
       "stripePriceId": null
     }
   ]
