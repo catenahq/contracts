@@ -5,10 +5,12 @@
 **Compliance baseline:** Loi 25 + CAI corporate-responsibility guide (Feb 2023)
 
 > Template. `[OPERATOR_LEGAL_NAME]`, `[CLIENT_LEGAL_NAME]`,
-> `[CLIENT_ADDRESS]`, `[EFFECTIVE_DATE]`, and `[TIER]` are replaced
-> on the executed copy issued with the Order Form. The portal
-> records the commit SHA in `legal/msa.json.version` against the
-> client's acceptance row so the binding text can be reconstructed
+> `[CLIENT_ADDRESS]`, and `[EFFECTIVE_DATE]` are replaced on the
+> executed copy issued with the Order Form. The Subscription
+> composition (server + apps + optional support pack + installer)
+> is recorded on the Order Form, not in this template body. The
+> portal records the commit SHA in `legal/msa.json.version` against
+> the client's acceptance row so the binding text can be reconstructed
 > for any given client.
 
 ---
@@ -33,9 +35,14 @@ The Operator and the Client are each a **"Party"** and together the
 - **Suite**: the catena-managed self-hosting stack the Operator
   provisions for the Client, comprising one or more software
   applications drawn from the catena vetted catalogue.
-- **Subscription Tier**: the published service tier the Client has
-  subscribed to (Base, Assisted, Small, Medium, or Large), as defined
-  on the Operator's pricing page.
+- **Subscription**: the Client's selection of recurring Operator
+  services, comprising the Server Subscription, App Subscriptions
+  (one per managed application beyond Nextcloud + OnlyOffice), and
+  an optional Support Pack, as defined on the Operator's pricing page
+  and recorded on the Order Form.
+- **Installer Fee**: the one-time setup fee (Base or Assisted) at
+  the start of the engagement, billed at order acceptance, as
+  defined on the Operator's pricing page.
 - **Personal Information**: as defined in section 2 of *An Act
   respecting the protection of personal information in the private
   sector* (CQLR c. P-39.1).
@@ -46,24 +53,27 @@ The Operator and the Client are each a **"Party"** and together the
 ### 2. Services
 
 The Operator will provision, configure, and operate the Suite for the
-Client at the Subscription Tier set out in the Order Form. The
-operational scope per tier is published on the Operator's pricing
-page; the Service Level Agreement at Schedule A governs uptime and
-response-time commitments. Schedules are appended to the executed
-copy of this Agreement issued with the Order Form.
+Client per the Subscription set out in the Order Form. The operational
+scope is published on the Operator's pricing page; the Service Level
+Agreement at Schedule A governs uptime and response-time commitments.
+Schedules are appended to the executed copy of this Agreement issued
+with the Order Form.
 
 ### 3. Fees and billing
 
-3.1 **Charges.** Fees are as published at the Subscription Tier in
-effect on the Effective Date. One-time tiers (Base, Assisted) are
-billed at order acceptance; recurring tiers (Small, Medium, Large)
-are billed monthly in advance with a minimum commitment of **six (6)
-months** from the install-completion date.
+3.1 **Charges.** Fees are as published on the Operator's pricing page
+on the Effective Date. The Installer Fee is billed at order
+acceptance. The recurring Subscription components (Server
+Subscription, App Subscriptions, and any Support Pack selected) are
+billed monthly in advance, with a minimum commitment of **six (6)
+months** from the install-completion date for the recurring
+Subscription.
 
 3.2 **Currency.** All amounts are in Canadian dollars (CAD).
 
-3.3 **À-la-carte support.** Support beyond the included monthly
-allocation is billed at the published hourly rate in 30-minute
+3.3 **À-la-carte support.** Support beyond an active Support Pack, or
+support time used when no Support Pack is in effect, is billed at the
+published hourly rate (day / evening / night brackets) in 15-minute
 increments.
 
 3.4 **Payment processing.** Card processing is performed by Stripe.
@@ -145,12 +155,12 @@ without further fee on the effective date of the change.
 ### 9. Term and termination
 
 9.1 **Initial term.** Six (6) months from the install-completion date
-for recurring tiers; one-time tiers terminate on Operator delivery of
-the install plus the included support window (if any).
+for the recurring Subscription; the Installer Fee terminates on
+Operator delivery of the install plus any included support window.
 
-9.2 **Renewal.** Recurring tiers renew month-to-month after the
-initial term; either Party may terminate on **thirty (30) days'**
-written notice.
+9.2 **Renewal.** The recurring Subscription renews month-to-month
+after the initial term; either Party may terminate on **thirty (30)
+days'** written notice.
 
 9.3 **Termination for cause.** Either Party may terminate immediately
 on a material breach by the other that is not cured within thirty
