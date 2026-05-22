@@ -14,18 +14,18 @@
       "id": "server",
       "displayName": { "en": "Server", "fr": "Serveur" },
       "tagline": {
-        "en": "Hardened base. Nextcloud + OnlyOffice (or Collabora) installed and managed. Drilled backups, monitoring, 4 BH response SLA.",
-        "fr": "Base durcie. Nextcloud + OnlyOffice (ou Collabora) installes et geres. Sauvegardes exercees, supervision, SLA de reponse 4 heures ouvrables."
+        "en": "Hardened base. SSO baseline, drilled backups, monitoring, 4 BH response SLA. Pick which apps run on top.",
+        "fr": "Base durcie. SSO inclus, sauvegardes exercees, supervision, SLA de reponse 4 heures ouvrables. Choisissez les applications a deployer."
       },
-      "monthlyPriceCents": 40000,
+      "monthlyPriceCents": 20000,
       "stripePriceId": null
     },
     "app": {
       "id": "app",
       "displayName": { "en": "App", "fr": "Application" },
       "tagline": {
-        "en": "Per app beyond Nextcloud + OnlyOffice. Install + SSO + updates + CVE monitoring + upgrade testing.",
-        "fr": "Par application au-dela de Nextcloud + OnlyOffice. Installation + SSO + mises a jour + surveillance CVE + tests de mise a niveau."
+        "en": "Per app you run. Install + SSO + updates + CVE monitoring + upgrade testing.",
+        "fr": "Par application deployee. Installation + SSO + mises a jour + surveillance CVE + tests de mise a niveau."
       },
       "monthlyPriceCents": 10000,
       "stripePriceId": null
