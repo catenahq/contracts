@@ -52,7 +52,8 @@ const SKIP_EXTENSIONS = new Set([
   // Office binary formats. They embed stray Unicode codepoints inside
   // their zip-compressed payload that look like forbidden punctuation
   // to a naive byte scan but are not editable text.
-  ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt", ".odt",
+  ".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt",
+  ".odt", ".ods", ".odp", ".odg",
 ]);
 
 const files = execSync("git ls-files", { encoding: "utf-8" })
