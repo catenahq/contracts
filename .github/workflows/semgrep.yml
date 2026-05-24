@@ -1,9 +1,13 @@
-name: Semgrep (report-only)
+name: Semgrep
 
-# Wave 3 SAST gate. contracts/ is a data-only package (brand,
-# pricing, legal), but it has a small Node script surface for
-# JSON validators + unicode-hygiene. p/javascript catches obvious
-# patterns in those scripts. Report-only via continue-on-error.
+# Wave 4 (blocking) SAST gate. contracts/ is a data-only package
+# (brand, pricing, legal), but it has a small Node script surface
+# for JSON validators + unicode-hygiene. p/javascript catches
+# obvious patterns in those scripts.
+#
+# Promoted from report-only on 2026-05-24 (Wave 4). `--error` is
+# the rule-severity floor: only ERROR rules block the job; WARNING
+# / INFO stay advisory.
 # See ~/.claude/plans/make-a-plan-that-shimmying-dragon.md.
 
 on:
@@ -28,8 +32,7 @@ jobs:
       - name: Install semgrep
         run: pip install --no-cache-dir semgrep
 
-      - name: Scan (report-only)
-        continue-on-error: true
+      - name: Scan
         run: |
           semgrep scan \
             --config=p/javascript \
