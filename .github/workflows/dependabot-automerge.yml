@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Read Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
 
       - name: Enable auto-merge (security advisory, non-major)
         if: contains(github.event.pull_request.labels.*.name, 'security') && steps.meta.outputs.update-type != 'version-update:semver-major'
