@@ -26,6 +26,18 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: OSV-Scanner
         run: |
-          docker run --rm -v "$PWD:/src" -w /src \
+          set +e
+          out=$(docker run --rm -v "$PWD:/src" -w /src \
             ghcr.io/google/osv-scanner:v2.3.8 \
-            scan source --recursive .
+            scan source --recursive . 2>&1)
+          rc=$?
+          echo "$out"
+          # Content-only repos (no package-lock.json / yarn.lock / etc.) exit 128
+          # with "No package sources found". That's the steady state for a
+          # contract repo (package.json has no dependencies); treat it as green
+          # so the gate stays useful WITHOUT being a false-fail tripwire.
+          if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "No package sources found"; then
+            echo "::notice ::OSV-Scanner found no lockfiles to scan -- treating as green."
+            exit 0
+          fi
+          exit $rc
