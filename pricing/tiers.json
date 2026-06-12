@@ -31,29 +31,7 @@
       "stripePriceId": null
     }
   },
-  "supportPacks": [
-    {
-      "id": "pack_5h",
-      "displayName": { "en": "5-hour support pack", "fr": "Forfait support 5 heures" },
-      "hours": 5,
-      "monthlyPriceCents": 60000,
-      "stripePriceId": null
-    },
-    {
-      "id": "pack_10h",
-      "displayName": { "en": "10-hour support pack", "fr": "Forfait support 10 heures" },
-      "hours": 10,
-      "monthlyPriceCents": 110000,
-      "stripePriceId": null
-    },
-    {
-      "id": "pack_20h",
-      "displayName": { "en": "20-hour support pack", "fr": "Forfait support 20 heures" },
-      "hours": 20,
-      "monthlyPriceCents": 200000,
-      "stripePriceId": null
-    }
-  ],
+  "supportPacks": [],
   "installers": [
     {
       "id": "base",

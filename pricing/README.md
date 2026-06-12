@@ -100,6 +100,12 @@ TypeScript consumers import the typed view via `tiers.d.ts`.
 
 ## History
 
+- v1.0.1 (2026-06-12): support packs delisted. `supportPacks` is now
+  `[]` (a-la-carte-only): all support time bills at
+  `alacarteHourlyCents`. The field + `SupportPack` type are retained
+  for backward compatibility, so this is a value change (patch), not a
+  shape change. The portal dropped the pack picker; the marketing site
+  removed the pack cards.
 - v1.0.0 (2026-05-21): composable model. Replaces the v0.3.x
   named-tier ladder (Base / Assisted / Small / Medium / Large).
   Consumer migration required for portal and any operator tooling
