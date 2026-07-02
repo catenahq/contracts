@@ -2,9 +2,14 @@ name: security
 
 # Bundled FOSS security scan via catenahq/scanctl (profile full): detects the
 # repo's ecosystems and runs the matching scanners -- gitleaks, osv-scanner,
-# trivy fs+license, gosec/govulncheck (Go), semgrep, zizmor, guarddog -- merges
-# SARIF to code scanning, and emits a CycloneDX SBOM artifact. Replaces the
-# former per-tool security workflows once verified green in CI.
+# trivy fs+license, semgrep, zizmor, guarddog -- merges SARIF to code scanning,
+# and emits a CycloneDX SBOM artifact. Replaces the former per-tool security
+# workflows once verified green in CI.
+#
+# Inline caller, NOT the catenahq/scanctl reusable workflow: the reusable
+# github-reusable.yml@main startup-fails when called from a self-hosted runner.
+# This mirrors catena-ee's inline invocation, green on the same self-hosted
+# infra. scanctl itself stays at @main (installed via go install ...@main).
 
 on:
   pull_request:
@@ -19,9 +24,38 @@ permissions:
 
 jobs:
   scanctl:
-    uses: catenahq/scanctl/.github/workflows/github-reusable.yml@main
-      contents: read
-      security-events: write
-    with:
-      profile: full
-      runner: self-hosted
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0 # full history so gitleaks scans past commits
+          persist-credentials: false
+      - name: Put Go on PATH
+        run: echo "$HOME/.local/go/bin" >> "$GITHUB_PATH"
+      - name: Install uv
+        # uv backs the Python scanners (semgrep, guarddog), lazy-fetched at scan time.
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      - name: Install scanctl
+        run: go install github.com/catenahq/scanctl/cmd/scanctl@main
+      - name: Run scanctl
+        env:
+          # zizmor's API-backed audits use this when present; absent = --offline.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          "$(go env GOPATH)/bin/scanctl" run --profile full \
+            --out scanctl.sarif --sbom sbom.cdx.json \
+            --summary "$GITHUB_STEP_SUMMARY" .
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        with:
+          sarif_file: scanctl.sarif
+        continue-on-error: true
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          if-no-files-found: ignore
