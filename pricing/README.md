@@ -8,15 +8,17 @@ billing increment).
 
 Consumers:
 
-- **catenahq/portal**: renders the order form's composition picker
-  (installer + apps + support pack), drives Stripe authorize-at-submit
-  (installer fee) + multi-item Subscription creation on install
-  success (server + N apps + optional pack), enforces the minimum
-  commitment via ETF on cancel-before-month-N.
-- **catenahq/website**: renders `/pricing` (FR + EN) and the example
-  configurations on the marketing site.
-- **catenahq/ops**: the installer prompts read the composition to
-  scope sizing + backup retention.
+- **catenahq/ops**: `operator-tools/generate-sizing-doc.py` imports
+  `pricing/tiers.json` to render monthly-cost columns in the sizing
+  docs (client docs + sales discovery sheet). Today this is the only
+  code consumer.
+- **catenahq/website**: the pricing matrix and FAQ copy in
+  `src/i18n/*/common.json` are hand-synced to these values (the site
+  does not import the JSON). The website is the master for what the
+  offer SAYS; this file must be kept numerically in line with it.
+- **catenahq/portal**: intended consumer for the order form's
+  composition picker + Stripe wiring; not wired up yet (its pricing.ts
+  predates the composable model).
 
 ## Schema
 
@@ -100,6 +102,9 @@ TypeScript consumers import the typed view via `tiers.d.ts`.
 
 ## History
 
+- v1.0.2 (2026-07-09): server component $200 -> $100/month, matching
+  the website pricing matrix (Pro "$100 / month" per server; the
+  website is the offer master). Patch release.
 - v1.0.1 (2026-06-12): support packs delisted. `supportPacks` is now
   `[]` (a-la-carte-only): all support time bills at
   `alacarteHourlyCents`. The field + `SupportPack` type are retained

@@ -76,7 +76,7 @@ export interface TiersFile {
   managedMinimumCommitmentMonths: number;
   alacarteHourlyCents: AlacarteHourlyCents;
   /** Recurring monthly components: server (one per Suite) and app
-   *  (one per managed app beyond Nextcloud + OnlyOffice). */
+   *  (one per managed app beyond Nextcloud + Euro Office). */
   components: {
     server: Component;
     app: Component;

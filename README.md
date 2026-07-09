@@ -10,7 +10,7 @@ repos is now a code review concern, not an invisible regression.
 | Directory | Contract | Primary consumers |
 |-----------|----------|-------------------|
 | `brand/`  | Design tokens (CSS variables + JS exports) + Conthrax wordmark binary + catena logo SVG | catenahq/website, catenahq/docs, catenahq/portal |
-| `pricing/`| Per-tier metadata (5 tiers, kind discriminator, support hours, employee cap, minimum commitment) + operator-wide knobs (hourly rate, per-extra-app, ETF multiplier) | catenahq/portal (UI + billing), catenahq/website (pricing page), catenahq/ops (installer prompts) |
+| `pricing/`| Composable pricing metadata (server + per-app monthly components, installers, a-la-carte hourly rates, ETF multiplier, minimum commitment -- no tier ladder since v1.0.0) | catenahq/ops (sizing-doc generator; today's only code consumer), catenahq/website (hand-synced pricing matrix -- the site is the offer master), catenahq/portal (intended, not yet wired) |
 | `legal/`  | Canonical MSA markdown + version pin (commit SHA) + effective date + published URL | catenahq/portal (terms_version column + checkbox), catenahq/website (renders `/legal/master-agreement`) |
 
 Add a new directory whenever a fact lives in more than one repo. Do
@@ -20,20 +20,26 @@ belong in the consuming repo until they stabilize.
 
 ## How consumers depend on it
 
-Each consumer adds the dep to its `package.json`:
+Each web consumer (website, docs, portal) declares a sibling-directory
+read in its `package.json`:
 
 ```json
 {
   "dependencies": {
-    "@catenahq/contracts": "github:catenahq/contracts#v0.1.0"
+    "@catenahq/contracts": "file:../contracts"
   }
 }
 ```
 
-Tagged releases are the unit of bump. Renovate (or Dependabot) opens
-PRs against each consumer when a new tag lands. For local
-development against an unreleased change, override via npm overrides
-or by symlinking.
+npm symlinks `node_modules/@catenahq/contracts` to the sibling
+checkout, so an edit here is visible on the consumer's next dev/build.
+CI mirrors the layout: each consumer's workflow checks out this repo
+alongside itself using a read-only `CONTRACTS_READ_TOKEN`. There is no
+vendored tarball and no freshness gate; to roll out a change, push
+here, then push (or re-run CI on) whichever consumer needs the new
+value. Tags still mark deliberate versions for humans (see Bump).
+catenahq/ops consumes `pricing/tiers.json` the same sibling-path way
+from `generate-sizing-doc.py`.
 
 Direct file imports:
 
@@ -66,24 +72,16 @@ CSS:
 4. CI validates JSON parses and `brand/test.js` still passes.
 5. Merge to main.
 6. Tag the merge commit: `git tag -a vX.Y.Z -m "..." && git push --tags`.
-7. Each consumer's `.github/workflows/contracts-update.yml` polls
-   this repo (weekly schedule + on-demand via workflow_dispatch).
-   When it sees a new tag or a content drift, it re-packs the
-   tarball, replaces the vendored copy, and opens a "contracts:
-   bump to vX.Y.Z" PR against itself.
-8. Review + merge each consumer PR. Verify the new contract is
-   consumed correctly (e.g. portal's tier rendering matches the new
-   `tiers.json`).
+7. Consumers pick the change up automatically on their next build
+   (sibling read; CI re-clones this repo fresh on every run). Re-run
+   or push each consumer whose rendered output should change, and
+   verify it consumed the new value (e.g. the ops sizing docs match
+   the new `tiers.json`).
 
-To force a bump immediately (e.g. urgent fix): go to each consumer's
-`Actions -> Check for contracts updates -> Run workflow`.
-
-Why pull-from-consumers, not push-from-contracts: a single read-only
-token (per consumer, scoped only to this repo) is a much smaller
-blast radius than a write-many token on every consumer. Consumers
-also stay in control of their own cadence -- a contracts bump that
-needs careful review of pricing/tier renaming can sit in PR review
-without blocking the contracts repo.
+Why sibling-read, not vendoring: one read-only token per consumer
+(scoped to this repo) and zero copy-sync machinery. The trade-off is
+that consumers always build against latest main -- a breaking shape
+change must land together with its consumer migrations.
 
 ## What does NOT live here
 

@@ -1,6 +1,6 @@
 {
   "name": "@catenahq/contracts",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": false,
   "description": "Shared contracts for the catena repos: brand tokens + wordmark assets, pricing tier metadata, legal MSA pin + canonical text. Consumers pin a tag and bump deliberately.",
   "type": "module",

@@ -4,7 +4,7 @@ Canonical commercial-agreement texts. Every file here is referenced
 by an executed Master Services Agreement and rendered verbatim on the
 website / linked from the portal. Operator-private templates
 (acceptance-tracking, breach-response, internal DPA template, loi25
-reference material) live in catenahq/sales, NOT here.
+reference material) live in the ops repo under `ops/sales/`, NOT here.
 
 - `master-agreement.md` -- the canonical English MSA text. Single
   source of truth; rendered verbatim on the website and referenced
@@ -30,11 +30,13 @@ Consumers:
   the published URLs.
 - **catenahq/website**: renders `master-agreement.md` at
   `/legal/master-agreement` (FR + EN) with `version` +
-  `effectiveDate` in the footer. Schedules render at sibling
-  routes (`/legal/sla`, `/legal/subprocessors`,
-  `/legal/data-export-and-termination`).
-- **catenahq/ops**: when a revision lands here, opens follow-up
-  PRs against the consumers.
+  `effectiveDate` in the footer. The schedules (`sla.md`,
+  `subprocessors.md`, `data-export-and-termination.md`) are NOT
+  rendered yet -- the sibling routes (`/legal/sla`,
+  `/legal/subprocessors`, `/legal/data-export-and-termination`) are
+  planned (tracked in ops BACKLOG_TECHNICAL); until they land, the
+  schedules are canonical here and attached to executed MSAs
+  manually.
 
 ## Schema
 
@@ -64,5 +66,6 @@ Consumers:
 2. Commit + merge to main. Note the resulting commit SHA.
 3. Open a follow-up PR updating `msa.json.version` to that SHA and
    bumping `effectiveDate`.
-4. Tag a patch release (e.g. 0.2.0 -> 0.2.1).
-5. The daily contracts-update workflow opens consumer PRs.
+4. Tag a patch release (e.g. 0.2.0 -> 0.2.1). Consumers build against
+   latest main via the sibling read; re-run/redeploy the website so
+   the rendered version pin updates.
