@@ -1,6 +1,6 @@
 {
   "name": "@catenahq/contracts",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "private": false,
   "description": "Shared contracts for the catena repos: brand tokens + wordmark assets, pricing tier metadata, legal MSA pin + canonical text. Consumers pin a tag and bump deliberately.",
   "type": "module",
@@ -11,7 +11,10 @@
     "./brand/assets/*": "./brand/assets/*",
     "./pricing/tiers.json": "./pricing/tiers.json",
     "./legal/msa.json": "./legal/msa.json",
-    "./legal/master-agreement.md": "./legal/master-agreement.md"
+    "./legal/master-agreement.md": "./legal/master-agreement.md",
+    "./legal/sla.md": "./legal/sla.md",
+    "./legal/subprocessors.md": "./legal/subprocessors.md",
+    "./legal/data-export-and-termination.md": "./legal/data-export-and-termination.md"
   },
   "files": [
     "brand",

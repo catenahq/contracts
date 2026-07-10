@@ -30,13 +30,12 @@ Consumers:
   the published URLs.
 - **catenahq/website**: renders `master-agreement.md` at
   `/legal/master-agreement` (FR + EN) with `version` +
-  `effectiveDate` in the footer. The schedules (`sla.md`,
-  `subprocessors.md`, `data-export-and-termination.md`) are NOT
-  rendered yet -- the sibling routes (`/legal/sla`,
-  `/legal/subprocessors`, `/legal/data-export-and-termination`) are
-  planned (tracked in ops BACKLOG_TECHNICAL); until they land, the
-  schedules are canonical here and attached to executed MSAs
-  manually.
+  `effectiveDate` in the footer, and the schedules (`sla.md`,
+  `subprocessors.md`, `data-export-and-termination.md`) at
+  `/legal/sla`, `/legal/subprocessors`,
+  `/legal/data-export-and-termination` (FR + EN). The canonical
+  text stays here; the pages render it verbatim with cross-schedule
+  links rewritten to the site routes.
 
 ## Schema
 

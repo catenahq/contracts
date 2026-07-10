@@ -55,7 +55,7 @@ adding it to the list:
 
 - a written contract (or vendor terms accepted by the Operator) that
   imposes confidentiality and security obligations equivalent to the
-  ones in [Schedule B](dpa-template.md);
+  ones in Schedule B (the data-processing agreement executed at signature);
 - a documented incident-notification commitment from the
   subprocessor;
 - where the subprocessor stores Personal Information outside Quebec,

@@ -123,7 +123,7 @@ Operator's involvement, as follows:
   fresh VPS.
 
 6.2 The Operator's contingency plan is documented in
-[breach-response.md](breach-response.md) and is not a binding
+the internal breach-response procedure and is not a binding
 commitment to maintain operations during force majeure.
 
 ## 7. Surviving clauses
