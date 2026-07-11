@@ -9,7 +9,7 @@ repos is now a code review concern, not an invisible regression.
 
 | Directory | Contract | Primary consumers |
 |-----------|----------|-------------------|
-| `brand/`  | Design tokens (CSS variables + JS exports) + Conthrax wordmark binary + catena logo SVG | catenahq/website, catenahq/docs, catenahq/portal |
+| `brand/`  | Design tokens (CSS variables) + Conthrax wordmark binary + catena logo SVG | catenahq/website, catenahq/docs, catenahq/portal |
 | `pricing/`| Composable pricing metadata (server + per-app monthly components, installers, a-la-carte hourly rates, ETF multiplier, minimum commitment -- no tier ladder since v1.0.0) | catenahq/ops (sizing-doc generator; today's only code consumer), catenahq/website (hand-synced pricing matrix -- the site is the offer master), catenahq/portal (intended, not yet wired) |
 | `legal/`  | Canonical MSA markdown + version pin (commit SHA) + effective date + published URL | catenahq/portal (terms_version column + checkbox), catenahq/website (renders `/legal/master-agreement`) |
 
@@ -45,7 +45,6 @@ Direct file imports:
 
 ```js
 import tiers from "@catenahq/contracts/pricing/tiers.json";
-import { breakpoints, minWidth, accent } from "@catenahq/contracts/brand";
 import msa from "@catenahq/contracts/legal/msa.json";
 // Canonical MSA markdown -- consumed by the website via fs.readFileSync
 // (the Astro page renders it through @astrojs/markdown-remark).
@@ -95,15 +94,7 @@ change must land together with its consumer migrations.
 
 ## LICENSE
 
-Pick a license before the first public push. Recommended: CC BY 4.0
-(matches the existing license precedent on catenahq/docs +
-catenahq/website for brand-adjacent material). AGPL or MIT also
-defensible.
-
-## Repo split status
-
-This is the 5th repo in the catenahq split (alongside ops, website,
-docs, portal). The split executed on 2026-05-13. Broader context
-lives in the catenahq/ops repo under
-`internal_docs/archive/repo-split-runbook.md` (operator-only,
-archived after execution).
+CC BY-SA 4.0 -- see [LICENSE](LICENSE). This repo is public: the legal
+texts, pricing metadata and brand tokens rendered on catena.run are
+verifiable here at their exact accepted versions (see `legal/msa.json`
+for the commit-SHA pin).

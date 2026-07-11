@@ -87,8 +87,6 @@ Consumers:
   bill all support hours at the `alacarteHourlyCents` rates in that
   case.
 
-TypeScript consumers import the typed view via `tiers.d.ts`.
-
 ## Bump
 
 - Price change (server, app, pack, installer, a-la-carte rate): bump
@@ -102,6 +100,11 @@ TypeScript consumers import the typed view via `tiers.d.ts`.
 
 ## History
 
+- v2.0.0 (2026-07-11): repo slim at first public release. Dropped the
+  never-consumed `tiers.d.ts` (portal kept a local interface; portal is
+  being retired) and the unused `brand/src/` JS entry (`./brand`
+  export). Major because an export was removed, even though no consumer
+  imported it.
 - v1.0.2 (2026-07-09): server component $200 -> $100/month, matching
   the website pricing matrix (Pro "$100 / month" per server; the
   website is the offer master). Patch release.

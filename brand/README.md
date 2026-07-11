@@ -27,9 +27,6 @@ brand/
   assets/
     logo.svg                catena wordmark / icon
     conthrax-semibold.otf   wordmark font binary
-  src/
-    index.js         JS exports: breakpoints, minWidth, accent, baseFontSize
-    breakpoints.js   breakpoints + minWidth() helper for matchMedia
   test.js            standalone smoke test (run with `node brand/test.js`)
 ```
 
@@ -50,12 +47,6 @@ In CSS:
 ```css
 @import "@catenahq/contracts/brand/tokens/all.css";
 @import "@catenahq/contracts/brand/wordmark/conthrax.css";  /* only if you render the wordmark */
-```
-
-In JS:
-
-```js
-import { breakpoints, minWidth, accent } from "@catenahq/contracts/brand";
 ```
 
 The logo SVG is consumable as a build-time asset import:
