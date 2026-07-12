@@ -43,3 +43,11 @@ Checklist before merging:
 script. Post-split, this repo is the source of truth; apps depend on
 it via npm-style import. The `sync-brand.mjs` mechanism stays
 documented for backward compatibility but is being phased out.
+
+## Security invariants (machine-enforced -- do not weaken silently)
+
+- This repo is PUBLIC and canonical for legal/pricing/brand: no
+  secrets, no operator config, no client data, ever (gitleaks on every
+  change; full-history scan was clean at publication).
+- Every merge is a deliberate semver bump + tag; legal text changes
+  only through that flow (msa.json SHA pin is what clients accepted).
