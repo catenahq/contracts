@@ -17,7 +17,7 @@
         "en": "Hardened base. SSO baseline, drilled backups, monitoring, 4 BH response SLA. Pick which apps run on top.",
         "fr": "Base durcie. SSO inclus, sauvegardes exercees, supervision, SLA de reponse 4 heures ouvrables. Choisissez les applications a deployer."
       },
-      "monthlyPriceCents": 10000,
+      "monthlyPriceCents": 5000,
       "stripePriceId": null
     },
     "app": {
@@ -27,7 +27,7 @@
         "en": "Per app you run. Install + SSO + updates + CVE monitoring + upgrade testing.",
         "fr": "Par application deployee. Installation + SSO + mises a jour + surveillance CVE + tests de mise a niveau."
       },
-      "monthlyPriceCents": 10000,
+      "monthlyPriceCents": 5000,
       "stripePriceId": null
     }
   },
