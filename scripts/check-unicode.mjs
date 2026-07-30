@@ -6,7 +6,7 @@
 //
 // Also scans for BANNED_WORDS: names of removed or never-adopted
 // systems that mark stale copy (reference list + rationale:
-// ops/internal_docs/operator/banned-words.md). Client-facing repos
+// ops/automation/audit/banned-words.yml). Client-facing repos
 // must never mention them.
 //
 // Wired as `npm run check:unicode` and a CI step in ci.yml.
@@ -46,7 +46,7 @@ const BANNED_WORDS = [
 ];
 
 // Operator-private decision logs may name a retired system to record
-// WHY it was retired (allowed context per banned-words.md). Unicode
+// WHY it was retired (allowed context per banned-words.yml). Unicode
 // hygiene still applies to these files; only the banned-word scan is
 // skipped. Paths are repo-relative, so entries are inert in repos
 // that do not contain them.
@@ -152,7 +152,7 @@ if (findings.length > 0) {
   console.error("");
   console.error(`Total: ${findings.length} occurrence(s).`);
   console.error("Replace with ASCII equivalents / current system names and re-run.");
-  console.error("Banned-word rationale: ops/internal_docs/operator/banned-words.md");
+  console.error("Banned-word rationale: ops/automation/audit/banned-words.yml");
   process.exit(1);
 }
 

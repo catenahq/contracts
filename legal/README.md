@@ -4,7 +4,8 @@ Canonical commercial-agreement texts. Every file here is referenced
 by an executed Master Services Agreement and rendered verbatim on the
 website / linked from the portal. Operator-private templates
 (acceptance-tracking, breach-response, internal DPA template, loi25
-reference material) live in the ops repo under `ops/sales/`, NOT here.
+reference material) live in the ops repo under
+`ops/internal_docs/compliance/`, NOT here.
 
 - `master-agreement.md` -- the canonical English MSA text. Single
   source of truth; rendered verbatim on the website and referenced
