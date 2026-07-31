@@ -38,6 +38,7 @@ const BANNED_WORDS = [
   { re: /\bnetbird\b/i, name: "netbird (never adopted; Tailscale)" },
   { re: /\bpomerium\b/i, name: "pomerium (never adopted; Tailscale)" },
   { re: /\bcal\.com\b/i, name: "cal.com (replaced by Easy!Appointments)" },
+  { re: /\bolivetin\b/i, name: "olivetin (replaced by the catena-admin Actions tab)" },
   // The operator inventory vault (SOPS+age) went 2026-07-28; secrets live
   // in the host's own /etc/catena/config.json. Bare "age" is deliberately
   // not listed: it is a substring of ordinary English.
