@@ -1,120 +1,83 @@
 # pricing/
 
-Composable pricing metadata: per-server + per-app recurring components,
-optional monthly support packs, one-time installer fees, and the
-operator-wide pricing knobs (a-la-carte hourly rates by time-of-day,
-custom-template setup, ETF multiplier, minimum commitment, support
-billing increment).
+The paid offer, as one flat plan: Catena Pro, a monthly retainer per
+server with unlimited apps. Plus the two operator-wide knobs that are
+not part of the plan price -- the a-la-carte hourly rates by time of day
+and the billing increment they round to.
 
 Consumers:
 
-- **catenahq/ops**: `operator-tools/generate-sizing-doc.py` imports
-  `pricing/tiers.json` to render monthly-cost columns in the sizing
-  docs (client docs + sales discovery sheet). Today this is the only
-  code consumer.
-- **catenahq/website**: the pricing matrix and FAQ copy in
-  `src/i18n/*/common.json` are hand-synced to these values (the site
-  does not import the JSON). The website is the master for what the
-  offer SAYS; this file must be kept numerically in line with it.
-- **catenahq/portal**: intended consumer for the order form's
-  composition picker + Stripe wiring; not wired up yet (its pricing.ts
-  predates the composable model).
+- **catenahq/website**: `src/components/PricingMatrix.astro` imports
+  `pricing/tiers.json` and renders the Pro price cell from
+  `plan.monthlyPriceCents`. The capability cells around it come from
+  `ops/automation/audit/features.yml` through
+  `generate-pricing-matrix.py`; the two must not contradict each other,
+  and the matrix is what the offer SAYS.
+- **catenahq/ops**: `operator-tools/generate-sizing-doc.py` points
+  readers here in prose. It does not read the JSON.
+
+There is no other code consumer. A shape change here breaks the website
+build and nothing else.
 
 ## Schema
 
-`tiers.json` (filename retained for backward-compatible imports):
+`tiers.json` (filename retained; the import path is public):
 
 ```json
 {
   "currency": "CAD",
   "supportIncrementMinutes": <int>,
-  "customTemplateSetupCents": <int>,
-  "earlyTerminationFeeMultiplier": <float, 0..1>,
-  "managedMinimumCommitmentMonths": <int>,
   "alacarteHourlyCents": {
     "day": <int>,
     "evening": <int>,
     "night": <int>
   },
-  "components": {
-    "server": {
-      "id": "server",
-      "displayName": { "en": "...", "fr": "..." },
-      "tagline":     { "en": "...", "fr": "..." },
-      "monthlyPriceCents": <int, > 0>,
-      "stripePriceId": "<Stripe price id>" | null
-    },
-    "app": {
-      "id": "app",
-      "displayName": { "en": "...", "fr": "..." },
-      "tagline":     { "en": "...", "fr": "..." },
-      "monthlyPriceCents": <int, > 0>,
-      "stripePriceId": "<Stripe price id>" | null
-    }
-  },
-  "supportPacks": [
-    {
-      "id": "pack_5h" | "pack_10h" | "pack_20h" | ...,
-      "displayName": { "en": "...", "fr": "..." },
-      "hours": <int, > 0>,
-      "monthlyPriceCents": <int, > 0>,
-      "stripePriceId": "<Stripe price id>" | null
-    }
-  ],
-  "installers": [
-    {
-      "id": "base" | "assisted" | ...,
-      "displayName": { "en": "...", "fr": "..." },
-      "tagline":     { "en": "...", "fr": "..." },
-      "oneTimePriceCents": <int, > 0>,
-      "stripePriceId": "<Stripe price id>" | null
-    }
-  ]
+  "plan": {
+    "id": "pro",
+    "displayName": { "en": "...", "fr": "..." },
+    "tagline":     { "en": "...", "fr": "..." },
+    "monthlyPriceCents": <int, > 0>,
+    "stripePriceId": "<Stripe price id>" | null
+  }
 }
 ```
 
-- `id` is the stable key. Never rename in place -- add a new id and
-  flag the old one deprecated for one release cycle, then drop.
-- The model is composable: a Client buys an installer once + the
-  server component monthly + N app components monthly + optionally
-  one support pack monthly. There is no tier ladder.
+- One plan, one price. Community is free and Enterprise is bespoke, so
+  neither carries a number here; the website renders those two cells
+  from its own i18n strings.
+- The price is per server. Apps are unlimited and are never a line
+  item.
 - All prices are integer CAD cents. No floats, no currency string.
-- `stripePriceId` is `null` until the operator creates the Stripe
-  Product + Price for that component / pack / installer. The portal
-  fails closed (refuses to authorize / create a Subscription) when
-  null AND the relevant price > 0.
-- `supportPacks` may be `[]` (a-la-carte-only); the portal would
-  bill all support hours at the `alacarteHourlyCents` rates in that
-  case.
+- `stripePriceId` is `null` until the Stripe Product + Price exists.
+  Any biller must fail closed when it is null and the price is > 0.
+- `tagline` must stay consistent with the capability matrix. The matrix
+  is generated from `features.yml`, so it moves when the product moves;
+  this string does not, and is the likelier of the two to go stale.
 
 ## Bump
 
-- Price change (server, app, pack, installer, a-la-carte rate): bump
-  `monthlyPriceCents` / `oneTimePriceCents` / `alacarteHourlyCents.*`
-  + cut a **patch** release. Consumers re-pull on next cron.
-- New support pack, new installer, new top-level optional field: cut
-  a **minor** release. Consumers add UI rendering in their next PR.
-- Shape change (renamed field, removed field, removed component): cut
-  a **major** release. Coordinate consumer migrations in the PR
-  description.
+- Price change (`monthlyPriceCents`, any `alacarteHourlyCents.*`): cut a
+  **patch** release.
+- New optional top-level field: cut a **minor** release.
+- Shape change (renamed field, removed field): cut a **major** release
+  and land the website migration in the same push -- consumers build
+  against latest main, so a breaking change with no consumer migration
+  breaks the site.
 
 ## History
 
+- v3.0.0 (2026-08-26): the composable model is gone. Catena Pro is a
+  **flat $100/month per server** with unlimited apps. Removed the
+  per-app component (`components.app`), the `components` wrapper itself
+  (one plan is not a composition), the installer fees, the delisted
+  `supportPacks` field, `customTemplateSetupCents`,
+  `earlyTerminationFeeMultiplier` and `managedMinimumCommitmentMonths`.
+  A-la-carte hourly support is the only thing billed outside the
+  retainer. The file had carried the dead server-plus-per-app model for
+  months while the website's own matrix advertised unlimited apps.
 - v2.0.0 (2026-07-11): repo slim at first public release. Dropped the
-  never-consumed `tiers.d.ts` (portal kept a local interface; portal is
-  being retired) and the unused `brand/src/` JS entry (`./brand`
-  export). Major because an export was removed, even though no consumer
-  imported it.
-- v1.0.2 (2026-07-09): server component $200 -> $100/month, matching
-  the website pricing matrix (Pro "$100 / month" per server; the
-  website is the offer master). Patch release.
-- v1.0.1 (2026-06-12): support packs delisted. `supportPacks` is now
-  `[]` (a-la-carte-only): all support time bills at
-  `alacarteHourlyCents`. The field + `SupportPack` type are retained
-  for backward compatibility, so this is a value change (patch), not a
-  shape change. The portal dropped the pack picker; the marketing site
-  removed the pack cards.
-- v1.0.0 (2026-05-21): composable model. Replaces the v0.3.x
-  named-tier ladder (Base / Assisted / Small / Medium / Large).
-  Consumer migration required for portal and any operator tooling
-  that imported `TierKey`.
+  never-consumed `tiers.d.ts` and the unused `brand/src/` JS entry.
+- v1.0.1 (2026-06-12): support packs delisted; all support time bills at
+  `alacarteHourlyCents`.
+- v1.0.0 (2026-05-21): composable model, replacing the v0.3.x named-tier
+  ladder (Base / Assisted / Small / Medium / Large).

@@ -1,57 +1,19 @@
 {
   "currency": "CAD",
   "supportIncrementMinutes": 15,
-  "customTemplateSetupCents": 15000,
-  "earlyTerminationFeeMultiplier": 0.5,
-  "managedMinimumCommitmentMonths": 6,
   "alacarteHourlyCents": {
     "day": 15000,
     "evening": 22500,
     "night": 30000
   },
-  "components": {
-    "server": {
-      "id": "server",
-      "displayName": { "en": "Server", "fr": "Serveur" },
-      "tagline": {
-        "en": "Hardened base. SSO baseline, drilled backups, monitoring, 4 BH response SLA. Pick which apps run on top.",
-        "fr": "Base durcie. SSO inclus, sauvegardes exercees, supervision, SLA de reponse 4 heures ouvrables. Choisissez les applications a deployer."
-      },
-      "monthlyPriceCents": 5000,
-      "stripePriceId": null
+  "plan": {
+    "id": "pro",
+    "displayName": { "en": "Catena Pro", "fr": "Catena Pro" },
+    "tagline": {
+      "en": "Flat monthly retainer per server. Unlimited apps, single sign-on, automatic updates with CVE remediation, daily offsite immutable backups, independent uptime monitoring, helpdesk. Hands-on work bills hourly.",
+      "fr": "Forfait mensuel fixe par serveur. Applications illimitées, authentification unique, mises à jour automatiques avec correction des CVE, sauvegardes quotidiennes hors site immuables, supervision de disponibilité indépendante, service d'assistance. Le travail manuel est facturé à l'heure."
     },
-    "app": {
-      "id": "app",
-      "displayName": { "en": "App", "fr": "Application" },
-      "tagline": {
-        "en": "Per app you run. Install + SSO + updates + CVE monitoring + upgrade testing.",
-        "fr": "Par application deployee. Installation + SSO + mises a jour + surveillance CVE + tests de mise a niveau."
-      },
-      "monthlyPriceCents": 5000,
-      "stripePriceId": null
-    }
-  },
-  "supportPacks": [],
-  "installers": [
-    {
-      "id": "base",
-      "displayName": { "en": "Base installer", "fr": "Installation initiale" },
-      "tagline": {
-        "en": "Bring your own keys; portal-driven self-serve install.",
-        "fr": "Apportez vos propres cles; installation libre-service via le portail client."
-      },
-      "oneTimePriceCents": 20000,
-      "stripePriceId": null
-    },
-    {
-      "id": "assisted",
-      "displayName": { "en": "Assisted", "fr": "Accompagnement" },
-      "tagline": {
-        "en": "Base + a 1-hour onboarding call to walk you through provider account creation.",
-        "fr": "Base + un appel d'onboarding d'une heure pour vous guider a travers la creation des comptes fournisseurs."
-      },
-      "oneTimePriceCents": 30000,
-      "stripePriceId": null
-    }
-  ]
+    "monthlyPriceCents": 10000,
+    "stripePriceId": null
+  }
 }
