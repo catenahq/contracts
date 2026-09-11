@@ -17,6 +17,43 @@ depends on. See README.md for the layout + consumer model.
 - No emojis or em-dashes in any artifact. Plain hyphens + straight
   quotes only.
 
+## Workspace hygiene gates (this repo owns them)
+
+Every catena repo runs these, and they exist ONLY here. A consumer holds
+no copy: its CI checks this repo out alongside it and runs the script
+from there.
+
+    node ../contracts/scripts/check-unicode.mjs   # unicode + banned words
+    node ../contracts/scripts/check-prose.mjs     # comment prose
+
+Both take the CURRENT DIRECTORY as their scan scope, because they
+enumerate with `git ls-files`. That is how the ops sales job scopes
+itself to one subtree by running from it.
+
+| Path | What it is |
+| --- | --- |
+| `scripts/check-unicode.mjs` | No em dashes, smart quotes or decorative Unicode, in any tracked file. Plus the banned-word scan. |
+| `scripts/check-prose.mjs` | Runs Vale over code comments. Batches, because Vale leaks a tree-sitter query per file and dies on a large tree. |
+| `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
+| `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |
+| `vale/Catena/*.yml` | The rules. Comments only: prose files record history on purpose. |
+| `.vale-version` | The pinned binary. `check-prose.mjs` refuses to run against a different one, because the grammars decide which comments are visible. |
+| `banned-words.json` | Tokens and stem flags, RENDERED from `ops/automation/audit/banned-words.yml` by a generator in ops. Do not hand-edit. |
+
+Editing rules: change `vale/Catena/`, re-run the gate in a consumer to
+see the blast radius, and expect debt files to move. **Never use a Vale
+`raw` key.** It replaces a rule's `tokens` list, and its own entries
+concatenate rather than alternate, so a multi-entry `raw` rule matches
+nothing and reports nothing.
+
+Each consumer owns two files and nothing else: `banned-words-debt.txt`
+and `prose-debt.txt`, one `path -- reason` per line. A listed file that
+is already clean FAILS the gate, so a drained entry has to be deleted.
+
+`banned-words.json` carries tokens and stem flags only. This repo is
+public, and the manifest's replacement prose is operator-facing: it names
+on-box paths and states what protects the panel binary. Keep it out.
+
 ## Add a new contract directory
 
 Checklist before merging:
