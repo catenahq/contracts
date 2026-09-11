@@ -7,17 +7,30 @@
 # Starts at warning. `phase` and `step` both have ordinary technical
 # senses in this workspace (the installer has a preflight phase), so this
 # rule earns promotion to error only once its debt list stops growing.
+#
+# These are `tokens` and NOT `raw`, which is load-bearing: Vale
+# CONCATENATES raw entries into one expression rather than alternating
+# them. `raw: [foo, bar]` matches `foobar` and neither half alone, so a
+# multi-entry raw list is a rule that matches nothing and says nothing.
+# `tokens` entries alternate. `nonword: true` keeps Vale from wrapping
+# each one in \b, since they carry their own.
 extends: existence
 message: "Plan reference '%s' in a comment. Name the behavior, not the step."
 level: warning
 nonword: true
 scope: comment
-raw:
+tokens:
   - '\bP\d+(?:\.\d+)+\b'
   - '(?i)\b(?:phase|step|stage|milestone|iteration|sprint)\s+\d+[a-z]?\b'
   - '(?i)\b(?:phase|step|stage)\s+[IVX]{1,4}\b'
-  # Catches the `0b-client-owned-config` and `0b: ` shapes and reports
-  # the coordinate alone. Vale supports lookahead.
-  - '\b\d+[a-z](?=[-:]\s)'
+  # Catches the `0b-client-owned-config` slug and reports the coordinate
+  # alone. Vale supports lookahead.
+  #
+  # The hyphen-plus-letter is deliberate. An earlier `(?=[-:]\s)` also
+  # took the `0b: ` form and with it `Check 4a: `, `Check 4b: ` and
+  # `within 10s:` -- enumerated labels and a duration, neither of which
+  # is a plan coordinate. The slug is the shape this workspace actually
+  # writes.
+  - '\b\d+[a-z](?=-[a-z])'
   - '(?i)\bper the (?:plan|backlog)\b'
   - '(?i)\bBACKLOG_TECHNICAL\b'
