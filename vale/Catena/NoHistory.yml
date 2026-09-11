@@ -21,7 +21,10 @@ level: error
 ignorecase: true
 scope: comment
 tokens:
-  - used to
+  # "it used to be inferred" is history. "cannot be used to diagnose the
+  # SSO tool" is the purpose sense, where "used to" means "in order to"
+  # and the passive in front of it is the tell.
+  - (?<!be )(?<!is )(?<!are )(?<!been )(?<!being )used to
   - no longer
   - previously
   - formerly
