@@ -74,9 +74,12 @@ function loadBanned() {
     console.error(`${MANIFEST} lists no tokens`);
     process.exit(2);
   }
+  // Token and stem only. The manifest's replacement prose is written for
+  // an operator and names on-box paths; this repo is public, so the
+  // message points at the manifest rather than quoting it.
   return tokens.map((t) => ({
     re: boundary(t.token, t.stem),
-    name: t.use_instead ? `${t.token} (use instead: ${t.use_instead})` : t.token,
+    name: `${t.token} (names a system Catena does not ship)`,
   }));
 }
 

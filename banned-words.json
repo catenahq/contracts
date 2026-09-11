@@ -3,103 +3,83 @@
   "tokens": [
     {
       "token": "dokploy",
-      "stem": false,
-      "use_instead": "Portainer (App Templates + Stacks)"
+      "stem": false
     },
     {
       "token": "kuma",
-      "stem": false,
-      "use_instead": "Gatus (on-host) + Healthchecks (external)"
+      "stem": false
     },
     {
       "token": "uptime-kuma",
-      "stem": false,
-      "use_instead": "Gatus (on-host) + Healthchecks (external)"
+      "stem": false
     },
     {
       "token": "netdata",
-      "stem": false,
-      "use_instead": "removed (Gatus + ntfy model)"
+      "stem": false
     },
     {
       "token": "cal.com",
-      "stem": false,
-      "use_instead": "Easy!Appointments"
+      "stem": false
     },
     {
       "token": "calcom",
-      "stem": false,
-      "use_instead": "Easy!Appointments"
+      "stem": false
     },
     {
       "token": "authentik",
-      "stem": false,
-      "use_instead": "Keycloak + oauth2-proxy"
+      "stem": false
     },
     {
       "token": "restore.sh",
-      "stem": false,
-      "use_instead": "catena recover (CE CLI)"
+      "stem": false
     },
     {
       "token": "recovery archive",
-      "stem": false,
-      "use_instead": "catena recover (CE CLI)"
+      "stem": false
     },
     {
       "token": "olivetin",
-      "stem": false,
-      "use_instead": "the catena-admin Actions tab. The same scripts run from /usr/local/bin/catena-* via the payload lanes."
+      "stem": false
     },
     {
       "token": "mvdan.cc/garble",
-      "stem": false,
-      "use_instead": "plain reproducible build + digest-pinned bases. IP protection is the domain-bound runtime entitlement plus the support contract."
+      "stem": false
     },
     {
       "token": "obfuscat",
-      "stem": true,
-      "use_instead": "plain reproducible build + digest-pinned bases. IP protection is the domain-bound runtime entitlement plus the support contract."
+      "stem": true
     },
     {
       "token": "sops",
-      "stem": false,
-      "use_instead": "the on-box store /etc/catena/config.json, minted on the host and riding the restic backup. The inventory is bootstrap input in plain YAML."
+      "stem": false
     },
     {
       "token": "vault.sops.yml",
-      "stem": false,
-      "use_instead": "the on-box store /etc/catena/config.json, minted on the host and riding the restic backup. The inventory is bootstrap input in plain YAML."
+      "stem": false
     },
     {
       "token": "sops_age_key",
-      "stem": false,
-      "use_instead": "the on-box store /etc/catena/config.json, minted on the host and riding the restic backup. The inventory is bootstrap input in plain YAML."
+      "stem": false
     },
     {
       "token": "age-keygen",
-      "stem": false,
-      "use_instead": "the on-box store /etc/catena/config.json, minted on the host and riding the restic backup. The inventory is bootstrap input in plain YAML."
+      "stem": false
     },
     {
       "token": "semaphore",
-      "stem": false,
-      "use_instead": "nothing. What an operator or a systemd unit starts is declared in audit/entrypoints.yml."
+      "stem": false
     },
     {
       "token": "authelia",
-      "stem": false,
-      "use_instead": "Keycloak"
+      "stem": false
     },
     {
       "token": "netbird",
-      "stem": false,
-      "use_instead": "Tailscale"
+      "stem": false
     },
     {
       "token": "pomerium",
-      "stem": false,
-      "use_instead": "Tailscale"
+      "stem": false
     }
   ]
 }
