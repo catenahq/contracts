@@ -4,10 +4,16 @@
 // character appears in a tracked source file. Natural-language
 // characters (accented letters, CJK, etc.) are unaffected.
 //
-// Also scans for BANNED_WORDS: names of removed or never-adopted
-// systems that mark stale copy (reference list + rationale:
-// ops/automation/audit/banned-words.yml). Client-facing repos
-// must never mention them.
+// Also scans for banned words: names of removed or never-adopted systems
+// that mark stale copy. Client-facing repos must never mention them.
+//
+// The list is DATA, read from banned-words.json next to this checkout.
+// That file is rendered from ops/automation/audit/banned-words.yml, which
+// carries the rationale for each entry and is the manifest the Python
+// audit reads. Before that, this script carried a hand-maintained copy of
+// the list, and the two had drifted: the copy was missing five tokens and
+// matched with \b, which anchors in the wrong place for a token carrying
+// punctuation such as cal.com or vault.sops.yml.
 //
 // ONE COPY. This script lives here and nowhere else. A consumer repo
 // runs it out of the sibling contracts checkout:
@@ -22,6 +28,8 @@
 
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const FORBIDDEN = {
   "—": 'em dash (use "--")',
@@ -37,23 +45,42 @@ const FORBIDDEN = {
   "»": "right guillemet (use straight \")",
 };
 
-// Removed / never-adopted system names (stale-copy markers). Word
-// boundaries keep e.g. "kumamoto" safe; case-insensitive.
-const BANNED_WORDS = [
-  { re: /\bdokploy\b/i, name: "dokploy (replaced by Portainer)" },
-  { re: /\bkuma\b/i, name: "kuma / uptime-kuma (replaced by Gatus)" },
-  { re: /\bnetdata\b/i, name: "netdata (removed)" },
-  { re: /\bauthelia\b/i, name: "authelia (never adopted; Keycloak)" },
-  { re: /\bnetbird\b/i, name: "netbird (never adopted; Tailscale)" },
-  { re: /\bpomerium\b/i, name: "pomerium (never adopted; Tailscale)" },
-  { re: /\bcal\.com\b/i, name: "cal.com (replaced by Easy!Appointments)" },
-  { re: /\bolivetin\b/i, name: "olivetin (replaced by the catena-admin Actions tab)" },
-  // The operator inventory vault (SOPS+age) went 2026-07-28; secrets live
-  // in the host's own /etc/catena/config.json. Bare "age" is deliberately
-  // not listed: it is a substring of ordinary English.
-  { re: /\bsops\b/i, name: "sops (replaced by the on-box config store)" },
-  { re: /SOPS_AGE_KEY/i, name: "SOPS_AGE_KEY (no decryption key exists)" },
-];
+const MANIFEST = join(resolve(dirname(fileURLToPath(import.meta.url)), ".."), "banned-words.json");
+
+// The boundary is custom rather than \b, and matches audit/banned_words.py
+// exactly: several tokens carry punctuation ("cal.com", "vault.sops.yml")
+// where \b anchors in the wrong places, so the neighbour test is "not a
+// letter, digit or underscore" applied to the token as a literal. A stem
+// keeps its leading boundary only, so "obfuscat" still matches
+// "obfuscated"; a whole word gets both, so "kuma" leaves "kumamoto" alone.
+//
+// Bare "age" is deliberately absent from the manifest: it is a substring
+// of ordinary English. The gated tokens are the ones that can only mean
+// the retired system.
+function boundary(token, stem) {
+  const literal = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tail = stem ? "" : "(?![0-9A-Za-z_])";
+  return new RegExp(`(?<![0-9A-Za-z_])${literal}${tail}`, "i");
+}
+
+function loadBanned() {
+  if (!existsSync(MANIFEST)) {
+    console.error(`banned-words manifest not found: ${MANIFEST}`);
+    console.error("Re-run catenahq/ops automation/operator-tools/generate-banned-words-json.py");
+    process.exit(2);
+  }
+  const { tokens } = JSON.parse(readFileSync(MANIFEST, "utf-8"));
+  if (!tokens || tokens.length === 0) {
+    console.error(`${MANIFEST} lists no tokens`);
+    process.exit(2);
+  }
+  return tokens.map((t) => ({
+    re: boundary(t.token, t.stem),
+    name: t.use_instead ? `${t.token} (use instead: ${t.use_instead})` : t.token,
+  }));
+}
+
+const BANNED_WORDS = loadBanned();
 
 // Files exempt from the banned-word scan, one `path -- reason` per line.
 // Two kinds of entry earn a place: an operator-private decision log
