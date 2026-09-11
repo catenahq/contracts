@@ -9,10 +9,15 @@
 // ops/automation/audit/banned-words.yml). Client-facing repos
 // must never mention them.
 //
+// This file is generated into each consumer repo by
+// contracts/scripts/sync-shared.mjs. Edit the copy in catenahq/contracts
+// and re-run the sync; a consumer-side edit is reverted by the
+// shared-sync CI job.
+//
 // Wired as `npm run check:unicode` and a CI step in ci.yml.
 
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
 const FORBIDDEN = {
   "—": 'em dash (use "--")',
@@ -46,15 +51,36 @@ const BANNED_WORDS = [
   { re: /SOPS_AGE_KEY/i, name: "SOPS_AGE_KEY (no decryption key exists)" },
 ];
 
-// Operator-private decision logs may name a retired system to record
-// WHY it was retired (allowed context per banned-words.yml). Unicode
-// hygiene still applies to these files; only the banned-word scan is
-// skipped. Paths are repo-relative, so entries are inert in repos
-// that do not contain them.
-const BANNED_WORD_ALLOWED_FILES = [
-  /^onboarding\/3_discovery_call\/README\.md$/,
-  /^onboarding\/4_defining_contract\/PLANNING\.md$/,
-];
+// Files exempt from the banned-word scan, one `path -- reason` per line.
+// Two kinds of entry earn a place: an operator-private decision log that
+// names a retired system to record WHY it was retired, and a file whose
+// migration is scheduled but not done.
+//
+// Unicode hygiene still applies to a listed file; only the banned-word
+// scan is skipped.
+//
+// The path is relative to the cwd the scan runs from, because
+// `git ls-files` makes cwd the scan scope. A listed path outside the
+// current scope is inert, so one list can be shared across scopes.
+//
+// A listed file that IS in scope and has no banned word is an error. A
+// stale exemption is how a gate quietly stops gating.
+const DEBT_FILE = "banned-words-debt.txt";
+
+function readDebt() {
+  const entries = new Map();
+  if (!existsSync(DEBT_FILE)) return entries;
+  for (const raw of readFileSync(DEBT_FILE, "utf-8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const [path, ...reason] = line.split(/\s+--\s+/);
+    entries.set(path.trim(), (reason.join(" -- ") || "").trim());
+  }
+  return entries;
+}
+
+const debt = readDebt();
+const debtHit = new Set();
 
 const SKIP_DIR_PATTERNS = [
   /^vendor\//,
@@ -70,6 +96,8 @@ const SKIP_FILE_PATTERNS = [
   /\.tgz$/,
   /\.lock$/,
   /scripts\/check-unicode\.mjs$/,
+  // The debt list names the systems it grants an exemption for.
+  /(^|\/)banned-words-debt\.txt$/,
   // Third-party text we do not control. The CC/Apache/MIT boilerplate
   // ships with curly quotes in upstream form and modifying it would
   // alter the legal text.
@@ -110,23 +138,25 @@ for (const file of files) {
   }
   // Cheap fast-path: skip the line-by-line scan if no forbidden char
   // or banned word is in the file at all.
-  let hit = false;
+  let unicodeInFile = false;
   for (const ch of Object.keys(FORBIDDEN)) {
     if (content.includes(ch)) {
-      hit = true;
+      unicodeInFile = true;
       break;
     }
   }
-  const scanBanned = !BANNED_WORD_ALLOWED_FILES.some((p) => p.test(file));
-  if (!hit && scanBanned) {
-    for (const { re } of BANNED_WORDS) {
-      if (re.test(content)) {
-        hit = true;
-        break;
-      }
+  // An exempt file is still scanned, so that an exemption which has
+  // stopped being needed can be reported below.
+  let bannedInFile = false;
+  for (const { re } of BANNED_WORDS) {
+    if (re.test(content)) {
+      bannedInFile = true;
+      break;
     }
   }
-  if (!hit) continue;
+  const exempt = debt.has(file);
+  if (bannedInFile && exempt) debtHit.add(file);
+  if (!unicodeInFile && !(bannedInFile && !exempt)) continue;
 
   const lines = content.split("\n");
   lines.forEach((line, idx) => {
@@ -136,7 +166,7 @@ for (const file of files) {
         findings.push(`${file}:${idx + 1}: ${name}\n    ${preview}`);
       }
     }
-    if (!scanBanned) return;
+    if (exempt) return;
     for (const { re, name } of BANNED_WORDS) {
       if (re.test(line)) {
         const preview = line.length > 100 ? line.slice(0, 100) + "..." : line;
@@ -146,15 +176,28 @@ for (const file of files) {
   });
 }
 
-if (findings.length > 0) {
-  console.error("Forbidden Unicode characters or banned words found (per workspace CLAUDE.md):");
-  console.error("");
-  for (const f of findings) console.error("  " + f);
-  console.error("");
-  console.error(`Total: ${findings.length} occurrence(s).`);
-  console.error("Replace with ASCII equivalents / current system names and re-run.");
-  console.error("Banned-word rationale: ops/automation/audit/banned-words.yml");
+// An exemption for a file that is in scope and already clean gates
+// nothing, and hides the next regression on that file.
+const tracked = new Set(files);
+const stale = [...debt.keys()].filter((f) => tracked.has(f) && !debtHit.has(f));
+
+if (findings.length > 0 || stale.length > 0) {
+  if (findings.length > 0) {
+    console.error("Forbidden Unicode characters or banned words found (per workspace CLAUDE.md):");
+    console.error("");
+    for (const f of findings) console.error("  " + f);
+    console.error("");
+    console.error(`Total: ${findings.length} occurrence(s).`);
+    console.error("Replace with ASCII equivalents / current system names and re-run.");
+    console.error("Banned-word rationale: ops/automation/audit/banned-words.yml");
+  }
+  if (stale.length > 0) {
+    console.error("");
+    console.error(`Stale entries in ${DEBT_FILE} (these files name no banned system now):`);
+    for (const f of stale) console.error("  " + f);
+    console.error("Delete them, or the gate stops gating those files.");
+  }
   process.exit(1);
 }
 
-console.log("Unicode hygiene: clean.");
+console.log(`Unicode hygiene: clean (${files.length} file(s) in scope).`);
