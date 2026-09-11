@@ -19,33 +19,23 @@ check(
 );
 
 check(
-  "a trailing comment keeps its column",
+  "a comment at column zero is kept",
+  "# history here\nname: x",
+  "# history here\n",
+);
+
+// Trailing comments are out of scope: they carry none of the findings
+// and separating them from a `#` inside a scalar needs quote tracking.
+check(
+  "a trailing comment is not extracted",
   "command: /bin/true  # runs it",
-  "                    # runs it",
+  "",
 );
 
 check(
-  "a hash inside a double-quoted scalar is not a comment",
+  "a hash inside a quoted scalar is not extracted either",
   'name: "deploy # not a comment"',
   "",
-);
-
-check(
-  "a hash inside a single-quoted scalar is not a comment",
-  "name: 'deploy # not a comment'",
-  "",
-);
-
-check(
-  "an escaped quote does not end a single-quoted scalar early",
-  "name: 'it''s # still a scalar'",
-  "",
-);
-
-check(
-  "a real comment after a quoted scalar is found",
-  'name: "deploy"  # the real one',
-  "                # the real one",
 );
 
 check(
@@ -61,15 +51,15 @@ check(
 );
 
 check(
-  "a comment on the block scalar header is kept",
+  "a comment on the block scalar header does not open a scan of its body",
   "script: | # header comment\n  # not a comment\nnext: 1",
-  "          # header comment\n\n",
+  "\n\n",
 );
 
 check(
   "a block scalar ends at a dedent",
-  "script: |\n  content\nother: 2  # found\n",
-  "\n\n          # found\n",
+  "script: |\n  content\n# found\n",
+  "\n\n# found\n",
 );
 
 check(
@@ -79,9 +69,33 @@ check(
 );
 
 check(
+  "an indent indicator is recognised",
+  "a: |2\n  # content\nb: 1",
+  "\n\n",
+);
+
+check(
   "blank lines inside a block scalar stay inside it",
   "script: |\n  one\n\n  # still content\nnext: 1",
   "\n\n\n\n",
+);
+
+check(
+  "markdown in a block scalar is not a comment",
+  "notes: |-\n  ## Gaps (tracked, not hidden)\n\n  - a bullet\nother: 1",
+  "\n\n\n\n",
+);
+
+check(
+  "a nested block scalar closes at the parent indent",
+  "a:\n  b: |\n    # content\n  c: 1\n# real\n",
+  "\n\n\n\n# real\n",
+);
+
+check(
+  "a pipe inside a quoted value does not open a block scalar",
+  'cmd: "a | b"\n# real comment',
+  "\n# real comment",
 );
 
 check("an empty file stays empty", "", "");

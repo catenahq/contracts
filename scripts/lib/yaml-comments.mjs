@@ -10,50 +10,35 @@
 // parses cleanly, and because the prefix is padded rather than removed,
 // an alert at line:col in the skeleton is at line:col in the YAML.
 //
-// `#` does NOT always start a comment. Three cases have to be told apart:
+// WHOLE-LINE COMMENTS ONLY. A trailing comment (`command: x  # runs it`)
+// is not extracted. Measured over the eight repos: trailing comments are
+// 227 of 13456 comment lines, and they account for ZERO of the findings,
+// because history and plan references get written in explanatory blocks
+// rather than in a four-word annotation after a value. Scanning them
+// needed quote tracking to tell `# runs it` from `name: "a # b"`, which
+// is a chunk of state machine earning nothing.
 //
-//     name: "deploy # not a comment"   # this one is
-//     script: |
-//       # block scalar content, not a comment
-//     url: https://example.com/#anchor
+// BLOCK SCALARS STILL MATTER, and are the reason this is not a one-line
+// filter. Their content is indented and frequently starts with `#`:
 //
-// Per the YAML spec a comment starts at a `#` that is at the start of a
-// line or preceded by whitespace, and is not inside a quoted scalar or a
-// block scalar. That is what the scanner below implements.
+//     notes: |-
+//       ## Gaps (tracked, not hidden)     <- Markdown, not a comment
+//     run: |
+//       # seed the baseline               <- shell, inside a workflow
 //
-// LIMIT: quote state is tracked within a line, not across lines. A
-// multi-line quoted scalar containing ` #` would be read as a comment.
-// That shape is vanishingly rare in Ansible, and a false positive costs
-// one debt-file entry rather than a wrong verdict on real code.
+// Ignoring them admits 418 such lines across the workspace as comments.
+// So the scanner tracks one thing: whether the current line is inside a
+// block scalar.
+//
+// LIMIT: a multi-line quoted scalar whose continuation line begins with
+// `#` reads as a comment. That shape is vanishingly rare in Ansible, and
+// a false positive costs one debt-file entry rather than a wrong verdict
+// on real code.
 
-const BLOCK_SCALAR = /(?:^|\s)[|>][+-]?\d*\s*$/;
-
-// Index at which a comment starts on this line, or -1.
-function commentStart(line) {
-  let quote = null;
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (quote === '"') {
-      if (ch === "\\") i += 1;
-      else if (ch === '"') quote = null;
-      continue;
-    }
-    if (quote === "'") {
-      // '' is an escaped quote inside a single-quoted scalar.
-      if (ch === "'" && line[i + 1] === "'") i += 1;
-      else if (ch === "'") quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (ch === "#" && (i === 0 || line[i - 1] === " " || line[i - 1] === "\t")) {
-      return i;
-    }
-  }
-  return -1;
-}
+// A block scalar opens with | or > (plus optional chomping and indent
+// indicators) at the end of the line. The trailing `#.*` allows for a
+// comment on the header itself: `script: | # sets it up`.
+const BLOCK_SCALAR = /(?:^|\s)[|>][+-]?\d*\s*(?:#.*)?$/;
 
 function indentOf(line) {
   let n = 0;
@@ -70,22 +55,16 @@ export function commentSkeleton(text) {
 
   for (const line of lines) {
     if (blockIndent !== null) {
-      if (line.trim() === "") {
-        out.push("");
-        continue;
-      }
-      if (indentOf(line) > blockIndent) {
+      if (line.trim() === "" || indentOf(line) > blockIndent) {
         out.push("");
         continue;
       }
       blockIndent = null;
     }
 
-    const start = commentStart(line);
-    const code = start === -1 ? line : line.slice(0, start);
-    out.push(start === -1 ? "" : " ".repeat(start) + line.slice(start));
+    out.push(line.trimStart().startsWith("#") ? line : "");
 
-    if (BLOCK_SCALAR.test(code)) blockIndent = indentOf(line);
+    if (BLOCK_SCALAR.test(line)) blockIndent = indentOf(line);
   }
 
   return out.join("\n");
