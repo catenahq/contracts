@@ -127,8 +127,10 @@ const SKIP_FILE_PATTERNS = [
   /\.tgz$/,
   /\.lock$/,
   /scripts\/check-unicode\.mjs$/,
-  // The debt list names the systems it grants an exemption for.
+  // The debt list names the systems it grants an exemption for, and the
+  // manifest IS the list of names.
   /(^|\/)banned-words-debt\.txt$/,
+  /(^|\/)banned-words\.json$/,
   // Third-party text we do not control. The CC/Apache/MIT boilerplate
   // ships with curly quotes in upstream form and modifying it would
   // alter the legal text.
