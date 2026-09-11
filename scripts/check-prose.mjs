@@ -29,9 +29,11 @@
 // CATENA_VALE_BATCH files per invocation (default: 100)
 
 import { execFileSync, execSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { commentSkeleton } from "./lib/yaml-comments.mjs";
 
 const VALE = process.env.CATENA_VALE_BIN || "vale";
 const BATCH = Number(process.env.CATENA_VALE_BATCH || 100);
@@ -57,10 +59,14 @@ if (!installed.includes(PINNED)) {
 }
 
 // Extensions Vale has a tree-sitter grammar for AND this workspace uses.
-// Absent on purpose: .mjs (Vale ships no grammar for it, and a [formats]
-// entry maps to a markup parser, so it would silently scan nothing) and
-// .yml (read as plain text, so rules match task names and data values).
+// Absent on purpose: .mjs, for which Vale ships no grammar and a
+// [formats] entry does not help, because formats maps to a MARKUP parser.
 const EXTENSIONS = new Set([".py", ".go", ".js", ".jsx", ".ts", ".tsx"]);
+
+// YAML has no grammar either, but its comments are reachable: each file
+// is reduced to a comment skeleton and handed to Vale as .py, which maps
+// line and column exactly. See lib/yaml-comments.mjs.
+const YAML_EXTENSIONS = new Set([".yml", ".yaml"]);
 
 function readDebt() {
   const entries = new Map();
@@ -74,24 +80,53 @@ function readDebt() {
   return entries;
 }
 
-const files = execSync("git ls-files", { encoding: "utf-8" })
+const tracked = execSync("git ls-files", { encoding: "utf-8" })
   .trim()
   .split("\n")
-  .filter(Boolean)
-  .filter((f) => {
-    const dot = f.lastIndexOf(".");
-    return dot !== -1 && EXTENSIONS.has(f.slice(dot).toLowerCase());
-  });
+  .filter(Boolean);
 
-if (files.length === 0) {
+const extOf = (f) => {
+  const dot = f.lastIndexOf(".");
+  return dot === -1 ? "" : f.slice(dot).toLowerCase();
+};
+
+// The rule files quote the tokens they ban, in the comment explaining
+// why each one is banned, so they match themselves. Only contracts has
+// them in its own tree; elsewhere this filter costs nothing.
+const STYLES = join(CONTRACTS, "vale") + "/";
+const isStyle = (f) => resolve(f).startsWith(STYLES);
+
+const native = tracked.filter((f) => EXTENSIONS.has(extOf(f)) && !isStyle(f));
+const yaml = tracked.filter((f) => YAML_EXTENSIONS.has(extOf(f)) && !isStyle(f));
+
+// Each YAML file becomes a .py skeleton in a scratch directory, named by
+// index so no real path has to survive the round trip through Vale. A
+// file whose skeleton is blank has no comments and is not written at
+// all, which keeps the scratch directory to the files that can produce
+// an alert.
+const scratch = yaml.length ? mkdtempSync(join(tmpdir(), "catena-prose-")) : null;
+const skeletonOf = new Map();
+
+for (const file of yaml) {
+  const skeleton = commentSkeleton(readFileSync(file, "utf-8"));
+  if (skeleton.trim() === "") continue;
+  const path = join(scratch, `${skeletonOf.size}.py`);
+  writeFileSync(path, skeleton);
+  skeletonOf.set(path, file);
+}
+
+const files = native.concat(yaml);
+const toScan = native.concat([...skeletonOf.keys()]);
+
+if (toScan.length === 0) {
   console.log("Prose: no files in scope.");
   process.exit(0);
 }
 
 const alerts = new Map();
 
-for (let i = 0; i < files.length; i += BATCH) {
-  const batch = files.slice(i, i + BATCH);
+for (let i = 0; i < toScan.length; i += BATCH) {
+  const batch = toScan.slice(i, i + BATCH);
   let raw;
   try {
     raw = execFileSync(VALE, ["--no-exit", `--config=${CONFIG}`, "--output=JSON", ...batch], {
@@ -103,11 +138,16 @@ for (let i = 0; i < files.length; i += BATCH) {
     console.error(err.stderr || err.message);
     process.exit(2);
   }
-  for (const [file, found] of Object.entries(JSON.parse(raw || "{}"))) {
+  for (const [reported, found] of Object.entries(JSON.parse(raw || "{}"))) {
     if (!found.length) continue;
+    // A skeleton reports under its scratch path; line and column already
+    // match the YAML it came from, so only the name needs swapping back.
+    const file = skeletonOf.get(resolve(reported)) || skeletonOf.get(reported) || reported;
     alerts.set(file, (alerts.get(file) || []).concat(found));
   }
 }
+
+if (scratch) rmSync(scratch, { recursive: true, force: true });
 
 const debt = readDebt();
 const findings = [];
@@ -124,8 +164,8 @@ for (const [file, found] of alerts) {
 
 // An exemption for a file that is already clean gates nothing, and hides
 // the next regression on that file.
-const tracked = new Set(files);
-const stale = [...debt.keys()].filter((f) => tracked.has(f) && !errorFiles.has(f));
+const inScope = new Set(files);
+const stale = [...debt.keys()].filter((f) => inScope.has(f) && !errorFiles.has(f));
 
 const warnings = [...alerts.values()]
   .flat()

@@ -9,6 +9,12 @@
 # the decision logs record history on purpose.
 #
 # The weaker past-tense family lives in NoHistoryWeak.
+#
+# KNOWN FALSE POSITIVE: `no longer` also means "at any point stops",
+# which is a statement about runtime state and not about this repo:
+# "fails if the live findings no longer match the baseline". Nothing in
+# the text separates that from "the panel no longer ships", so the token
+# stays and the debt file absorbs the handful that are conditionals.
 extends: existence
 message: "History in a comment: '%s'. Put it in the commit message."
 level: error
