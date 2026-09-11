@@ -21,7 +21,7 @@
     "legal"
   ],
   "scripts": {
-    "test": "node brand/test.js && node scripts/validate-json.mjs && node scripts/lib/yaml-comments.test.mjs",
+    "test": "node brand/test.js && node scripts/validate-json.mjs && node scripts/lib/yaml-comments.test.mjs && node scripts/lib/shell-comments.test.mjs",
     "check:unicode": "node scripts/check-unicode.mjs",
     "check:prose": "node scripts/check-prose.mjs"
   },

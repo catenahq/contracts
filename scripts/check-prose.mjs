@@ -34,6 +34,7 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { commentSkeleton } from "./lib/yaml-comments.mjs";
+import { shellCommentSkeleton } from "./lib/shell-comments.mjs";
 
 const VALE = process.env.CATENA_VALE_BIN || "vale";
 const BATCH = Number(process.env.CATENA_VALE_BATCH || 100);
@@ -68,11 +69,17 @@ const EXTENSIONS = new Set([".py", ".go", ".js", ".jsx", ".ts", ".tsx"]);
 // grammar. Nothing is rewritten, so positions are exact.
 const JS_EXTENSIONS = new Set([".mjs", ".cjs"]);
 
-// YAML has no grammar either, and its content is not JavaScript, so it
-// takes the longer route: each file is reduced to a comment skeleton and
-// handed over as .py, which maps line and column exactly. See
-// lib/yaml-comments.mjs.
-const YAML_EXTENSIONS = new Set([".yml", ".yaml"]);
+// YAML and shell have no grammar either, and their content is not some
+// other language in disguise, so they take the longer route: each file
+// is reduced to a comment skeleton and handed over as .py, which maps
+// line and column exactly. One scanner each, because what has to be
+// suppressed differs: block scalars in YAML, heredocs in shell.
+const SKELETON = new Map([
+  [".yml", commentSkeleton],
+  [".yaml", commentSkeleton],
+  [".sh", shellCommentSkeleton],
+  [".bash", shellCommentSkeleton],
+]);
 
 function readDebt() {
   const entries = new Map();
@@ -104,14 +111,13 @@ const isStyle = (f) => resolve(f).startsWith(STYLES);
 
 const native = tracked.filter((f) => EXTENSIONS.has(extOf(f)) && !isStyle(f));
 const js = tracked.filter((f) => JS_EXTENSIONS.has(extOf(f)) && !isStyle(f));
-const yaml = tracked.filter((f) => YAML_EXTENSIONS.has(extOf(f)) && !isStyle(f));
+const skeletal = tracked.filter((f) => SKELETON.has(extOf(f)) && !isStyle(f));
 
 // Both detours write into one scratch directory, named by index so no
-// real path has to survive the round trip through Vale. A YAML file
-// whose skeleton is blank has no comments and is not written at all,
-// which keeps the directory to the files that can produce an alert.
-const needScratch = js.length + yaml.length > 0;
-const scratch = needScratch ? mkdtempSync(join(tmpdir(), "catena-prose-")) : null;
+// real path has to survive the round trip through Vale. A file whose
+// skeleton is blank has no comments and is not written at all, which
+// keeps the directory to the files that can produce an alert.
+const scratch = js.length + skeletal.length > 0 ? mkdtempSync(join(tmpdir(), "catena-prose-")) : null;
 const standInFor = new Map();
 
 function standIn(file, content, ext) {
@@ -124,13 +130,13 @@ for (const file of js) {
   standIn(file, readFileSync(file, "utf-8"), ".js");
 }
 
-for (const file of yaml) {
-  const skeleton = commentSkeleton(readFileSync(file, "utf-8"));
+for (const file of skeletal) {
+  const skeleton = SKELETON.get(extOf(file))(readFileSync(file, "utf-8"));
   if (skeleton.trim() === "") continue;
   standIn(file, skeleton, ".py");
 }
 
-const files = native.concat(js, yaml);
+const files = native.concat(js, skeletal);
 const toScan = native.concat([...standInFor.keys()]);
 
 if (toScan.length === 0) {
