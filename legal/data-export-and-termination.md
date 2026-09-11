@@ -19,8 +19,8 @@ portal or by email to the Operator. The export contains:
 - a copy of the Client-owned subset of the Operator vault entries
   (the Client's S3 / SMTP / provider credentials, where the Operator
   holds them on the Client's behalf);
-- a `restore.sh` invocation log (the script and its arguments) that
-  reproduces the Suite from the snapshot on a fresh VPS;
+- a `catena recover` invocation log (the command and its arguments)
+  that reproduces the Suite from the snapshot on a fresh VPS;
 - per-app raw data exports where the upstream offers them
   (Nextcloud user-export, Rocket.Chat export, EspoCRM export), at
   the Client's request.
@@ -57,8 +57,8 @@ Client:
     credentials (returned to the Client; not retained by the
     Operator),
   - a procedure for re-deploying the Suite on Client-controlled
-    infrastructure, anchored on the standard `restore.sh` flow and
-    the Operator's public documentation,
+    infrastructure, anchored on the standard `catena recover` flow
+    and the Operator's public documentation,
   - a list of subprocessor accounts that the Client should review
     or terminate post-handover.
 
@@ -118,7 +118,7 @@ Operator's involvement, as follows:
   Operator's vault, and a copy is delivered to the Client at
   Operator's request or quarterly (whichever is sooner) via a
   password-manager-shareable bundle.
-- the public `restore.sh` documentation walks a non-Operator
+- the public server-rebuild documentation walks a non-Operator
   technician through redeploying the Suite from the bucket onto a
   fresh VPS.
 

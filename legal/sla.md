@@ -88,7 +88,7 @@ with confirmed data loss:
   snapshot cadence).
 - **Recovery Time Objective (RTO):** 8 business hours from the
   start of recovery work to "Suite Up" on a fresh VPS (the
-  documented `restore.sh` flow).
+  documented `catena recover` flow).
 
 Quarterly restore drills validate these objectives. The most recent
 drill date is recorded in the Operator's audit log.
