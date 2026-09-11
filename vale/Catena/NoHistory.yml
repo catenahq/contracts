@@ -1,0 +1,47 @@
+# History in a code comment.
+#
+# A comment describes what the code does. What it used to do, and why
+# that changed, is what the commit message is for: the comment is read by
+# someone holding the current code, who cannot act on the old shape and
+# has no way to tell how stale the claim is.
+#
+# Scoped to comments. Prose files are not gated: AGENTS.md, README.md and
+# the decision logs record history on purpose.
+#
+# The weaker past-tense family lives in NoHistoryWeak.
+extends: existence
+message: "History in a comment: '%s'. Put it in the commit message."
+level: error
+ignorecase: true
+scope: comment
+tokens:
+  - used to
+  - no longer
+  - previously
+  - formerly
+  - originally
+  - historically
+  - in the past
+  - back when
+  - up until
+  - at the time
+  - once was
+  - renamed from
+  - moved (?:from|out of|into)
+  - deprecated in favou?r of
+  - not to be confused with
+  - has (?:since )?been (?:renamed|removed|moved|replaced|deleted|dropped)
+  - (?:we|they) used to
+  - before the \w+ (?:migration|rename|move|unification|split)
+  - as of \d{4}
+  - since v?\d+\.\d+
+  - pre-\d{4}
+  # "X was replaced by Y" is history. "will be replaced by a Vitest
+  # suite" is a stated intention about code that does not exist yet,
+  # which is a TODO and belongs in the comment. The lookbehind separates
+  # them; Vale supports it.
+  #
+  # This stays in `tokens` and not in `raw`: a `raw` key REPLACES the
+  # token list rather than adding to it, which silently disables every
+  # entry above.
+  - (?<!will be )(?<!to be )(?<!would be )(?:replaced|superseded) by

@@ -1,0 +1,24 @@
+# Bare negation in a code comment.
+#
+# Advisory. "does not" and "never" are load-bearing in a real invariant
+# ("the gate never runs on forks"), so this rule does not block: it
+# reports a count.
+#
+# The count is the point. If it is not falling, this rule is measuring
+# ordinary correct prose and should be deleted rather than kept as
+# permanent noise. NoContrastSpec is the half of this idea that earns an
+# error level.
+extends: existence
+message: "Negative phrasing: '%s'. Prefer the positive statement."
+level: warning
+ignorecase: true
+scope: comment
+tokens:
+  - does not
+  - do not
+  - doesn't
+  - don't
+  - is not
+  - are not
+  - never
+  - cannot

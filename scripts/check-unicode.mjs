@@ -9,10 +9,14 @@
 // ops/automation/audit/banned-words.yml). Client-facing repos
 // must never mention them.
 //
-// This file is generated into each consumer repo by
-// contracts/scripts/sync-shared.mjs. Edit the copy in catenahq/contracts
-// and re-run the sync; a consumer-side edit is reverted by the
-// shared-sync CI job.
+// ONE COPY. This script lives here and nowhere else. A consumer repo
+// runs it out of the sibling contracts checkout:
+//
+//   node ../contracts/scripts/check-unicode.mjs
+//
+// Scope is the cwd, because `git ls-files` runs there. So the command
+// above gates the consumer's tree, and the consumer's own
+// banned-words-debt.txt is the only file it owns here.
 //
 // Wired as `npm run check:unicode` and a CI step in ci.yml.
 

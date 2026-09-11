@@ -1,0 +1,24 @@
+# A comment that defines the code by asserting what it is not.
+#
+# "this is not a cache", "despite the name", "the reason we don't" all
+# point at a shape that is absent from the tree: an older implementation,
+# a rejected approach, a sibling that has since changed. The reader holds
+# one version of the code and cannot see the other half of the claim, so
+# the sentence costs them a search and settles nothing.
+#
+# The comparative forms ("rather than", "instead of") are in
+# NoComparison at warning level: across this workspace they are mostly
+# two present things being contrasted, which is a correct sentence.
+extends: existence
+message: "Definition by contrast: '%s'. State what it does, not what it isn't."
+level: error
+ignorecase: true
+scope: comment
+tokens:
+  - despite the name
+  - (?:this|that|it) is not (?:a|an|the)
+  - (?:this|that|it) does not mean
+  - note that this is not
+  - the reason we (?:don't|do not)
+  - we (?:don't|do not) use
+  - not to be confused with

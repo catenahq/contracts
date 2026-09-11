@@ -23,8 +23,7 @@
   "scripts": {
     "test": "node brand/test.js && node scripts/validate-json.mjs",
     "check:unicode": "node scripts/check-unicode.mjs",
-    "sync:shared": "node scripts/sync-shared.mjs",
-    "check:shared": "node scripts/sync-shared.mjs --check"
+    "check:prose": "node scripts/check-prose.mjs"
   },
   "repository": {
     "type": "git",

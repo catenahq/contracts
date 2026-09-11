@@ -1,0 +1,33 @@
+# Past tense in a code comment.
+#
+# The same rule as NoHistory, reaching the constructions that carry the
+# history without naming it: "this was a Path", "it were two calls".
+#
+# Higher recall, lower precision than NoHistory. Past tense is sometimes
+# legitimate inside a comment describing a conditional the code handles
+# ("the lookup failed"), so the tokens are constrained to the subject +
+# verb shapes that describe the code itself rather than its inputs.
+#
+# A part-of-speech rule would be the precise tool here, but Vale does not
+# tag comment blocks: a `sequence` rule with `tag: VBD` matches the same
+# sentence in Markdown prose and nothing at all in a .py or .go comment.
+# Word lists are the only mechanism that reaches a comment.
+extends: existence
+message: "Past tense in a comment: '%s'. Describe what the code does now."
+level: error
+ignorecase: true
+scope: comment
+tokens:
+  - (?:this|it|that|which|there) (?:was|were)
+  - (?:was|were) (?:a|an|the|not|never|originally|previously|meant|supposed)
+  - had been
+  - used to be
+  - wasn't
+  - weren't
+  - didn't
+exceptions:
+  # A value the code receives, not a shape the code used to have.
+  - was called with
+  - was passed
+  - was given
+  - was requested

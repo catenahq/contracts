@@ -1,0 +1,24 @@
+# A comment that explains the code by comparing it to something.
+#
+# Advisory. The comparison is sound when both halves are present and
+# named ("the writer batches rather than the reader"), and is history in
+# disguise when the other half is a version that no longer exists.
+# Nothing in the text distinguishes the two, so this rule reports and
+# does not block.
+#
+# Measured against ops/automation/audit/ on 2026-09-11: 77 of 82 hits on
+# the original combined rule came from "rather than" and "instead of",
+# nearly all of them correct present-tense prose. That is why these
+# tokens sit here at warning and not in NoContrastSpec at error.
+extends: existence
+message: "Comparison: '%s'. Check the other half is something that still exists."
+level: warning
+ignorecase: true
+scope: comment
+tokens:
+  - instead of
+  - rather than
+  - as opposed to
+  - in contrast (?:to|with)
+  - contrary to
+  - unlike

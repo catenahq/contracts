@@ -1,0 +1,23 @@
+# Plan coordinates in a code comment.
+#
+# "phase 5", "P1.3" and "0b-client-owned-config" name a position in a
+# plan. The plan moves, gets renumbered, or is finished and deleted, and
+# the comment then points at nothing. Name the behavior instead.
+#
+# Starts at warning. `phase` and `step` both have ordinary technical
+# senses in this workspace (the installer has a preflight phase), so this
+# rule earns promotion to error only once its debt list stops growing.
+extends: existence
+message: "Plan reference '%s' in a comment. Name the behavior, not the step."
+level: warning
+nonword: true
+scope: comment
+raw:
+  - '\bP\d+(?:\.\d+)+\b'
+  - '(?i)\b(?:phase|step|stage|milestone|iteration|sprint)\s+\d+[a-z]?\b'
+  - '(?i)\b(?:phase|step|stage)\s+[IVX]{1,4}\b'
+  # Catches the `0b-client-owned-config` and `0b: ` shapes and reports
+  # the coordinate alone. Vale supports lookahead.
+  - '\b\d+[a-z](?=[-:]\s)'
+  - '(?i)\bper the (?:plan|backlog)\b'
+  - '(?i)\bBACKLOG_TECHNICAL\b'
