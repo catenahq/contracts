@@ -18,8 +18,8 @@
 // needed quote tracking to tell `# runs it` from `name: "a # b"`, which
 // is a chunk of state machine earning nothing.
 //
-// BLOCK SCALARS STILL MATTER, and are the reason this is not a one-line
-// filter. Their content is indented and frequently starts with `#`:
+// BLOCK SCALARS STILL MATTER, and are why the scanner needs state at
+// all. Their content is indented and frequently starts with `#`:
 //
 //     notes: |-
 //       ## Gaps (tracked, not hidden)     <- Markdown, not a comment

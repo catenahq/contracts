@@ -56,8 +56,8 @@ const BANNED_WORDS = [
 ];
 
 // Files exempt from the banned-word scan, one `path -- reason` per line.
-// Two kinds of entry earn a place: an operator-private decision log that
-// names a retired system to record WHY it was retired, and a file whose
+// Two kinds of entry earn a place: an operator-private decision log
+// that names a retired system and records WHY it went, and a file whose
 // migration is scheduled but not done.
 //
 // Unicode hygiene still applies to a listed file; only the banned-word

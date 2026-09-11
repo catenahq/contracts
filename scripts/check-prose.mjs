@@ -59,13 +59,19 @@ if (!installed.includes(PINNED)) {
 }
 
 // Extensions Vale has a tree-sitter grammar for AND this workspace uses.
-// Absent on purpose: .mjs, for which Vale ships no grammar and a
-// [formats] entry does not help, because formats maps to a MARKUP parser.
 const EXTENSIONS = new Set([".py", ".go", ".js", ".jsx", ".ts", ".tsx"]);
 
-// YAML has no grammar either, but its comments are reachable: each file
-// is reduced to a comment skeleton and handed to Vale as .py, which maps
-// line and column exactly. See lib/yaml-comments.mjs.
+// Vale ships no grammar keyed to .mjs and a `[formats]` entry cannot fix
+// it, because formats maps an extension to a MARKUP parser. But the
+// content IS JavaScript: only the extension is in the way, so the file
+// is copied verbatim to a scratch .js and read by the JavaScript
+// grammar. Nothing is rewritten, so positions are exact.
+const JS_EXTENSIONS = new Set([".mjs", ".cjs"]);
+
+// YAML has no grammar either, and its content is not JavaScript, so it
+// takes the longer route: each file is reduced to a comment skeleton and
+// handed over as .py, which maps line and column exactly. See
+// lib/yaml-comments.mjs.
 const YAML_EXTENSIONS = new Set([".yml", ".yaml"]);
 
 function readDebt() {
@@ -97,26 +103,35 @@ const STYLES = join(CONTRACTS, "vale") + "/";
 const isStyle = (f) => resolve(f).startsWith(STYLES);
 
 const native = tracked.filter((f) => EXTENSIONS.has(extOf(f)) && !isStyle(f));
+const js = tracked.filter((f) => JS_EXTENSIONS.has(extOf(f)) && !isStyle(f));
 const yaml = tracked.filter((f) => YAML_EXTENSIONS.has(extOf(f)) && !isStyle(f));
 
-// Each YAML file becomes a .py skeleton in a scratch directory, named by
-// index so no real path has to survive the round trip through Vale. A
-// file whose skeleton is blank has no comments and is not written at
-// all, which keeps the scratch directory to the files that can produce
-// an alert.
-const scratch = yaml.length ? mkdtempSync(join(tmpdir(), "catena-prose-")) : null;
-const skeletonOf = new Map();
+// Both detours write into one scratch directory, named by index so no
+// real path has to survive the round trip through Vale. A YAML file
+// whose skeleton is blank has no comments and is not written at all,
+// which keeps the directory to the files that can produce an alert.
+const needScratch = js.length + yaml.length > 0;
+const scratch = needScratch ? mkdtempSync(join(tmpdir(), "catena-prose-")) : null;
+const standInFor = new Map();
+
+function standIn(file, content, ext) {
+  const path = join(scratch, `${standInFor.size}${ext}`);
+  writeFileSync(path, content);
+  standInFor.set(path, file);
+}
+
+for (const file of js) {
+  standIn(file, readFileSync(file, "utf-8"), ".js");
+}
 
 for (const file of yaml) {
   const skeleton = commentSkeleton(readFileSync(file, "utf-8"));
   if (skeleton.trim() === "") continue;
-  const path = join(scratch, `${skeletonOf.size}.py`);
-  writeFileSync(path, skeleton);
-  skeletonOf.set(path, file);
+  standIn(file, skeleton, ".py");
 }
 
-const files = native.concat(yaml);
-const toScan = native.concat([...skeletonOf.keys()]);
+const files = native.concat(js, yaml);
+const toScan = native.concat([...standInFor.keys()]);
 
 if (toScan.length === 0) {
   console.log("Prose: no files in scope.");
@@ -140,9 +155,9 @@ for (let i = 0; i < toScan.length; i += BATCH) {
   }
   for (const [reported, found] of Object.entries(JSON.parse(raw || "{}"))) {
     if (!found.length) continue;
-    // A skeleton reports under its scratch path; line and column already
-    // match the YAML it came from, so only the name needs swapping back.
-    const file = skeletonOf.get(resolve(reported)) || skeletonOf.get(reported) || reported;
+    // A stand-in reports under its scratch path; line and column already
+    // match the file it came from, so only the name needs swapping back.
+    const file = standInFor.get(resolve(reported)) || standInFor.get(reported) || reported;
     alerts.set(file, (alerts.get(file) || []).concat(found));
   }
 }
