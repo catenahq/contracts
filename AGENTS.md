@@ -50,6 +50,11 @@ Each consumer owns two files and nothing else: `banned-words-debt.txt`
 and `prose-debt.txt`, one `path -- reason` per line. A listed file that
 is already clean FAILS the gate, so a drained entry has to be deleted.
 
+Both scripts look for them in `.ci/`, then `.github/`, then the top of
+the scan scope, and take the first that exists. Consumer repos keep them
+under `.github/`; a scope that is a subtree rather than a repo, such as
+`ops/internal_docs/sales`, keeps them at its top.
+
 `banned-words.json` carries tokens and stem flags only. This repo is
 public, and the manifest's replacement prose is operator-facing: it names
 on-box paths and states what protects the panel binary. Keep it out.

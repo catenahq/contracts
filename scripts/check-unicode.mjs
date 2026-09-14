@@ -99,7 +99,12 @@ const BANNED_WORDS = loadBanned();
 //
 // A listed file that IS in scope and has no banned word is an error. A
 // stale exemption is how a gate quietly stops gating.
-const DEBT_FILE = "banned-words-debt.txt";
+// It sits in .ci/ or .github/ where the scope has one, so gate bookkeeping
+// stays off a repo's landing page. A scope with neither, such as
+// ops/internal_docs/sales, keeps it at the top of that scope.
+const DEBT_FILE =
+  [".ci/banned-words-debt.txt", ".github/banned-words-debt.txt"].find(existsSync) ||
+  "banned-words-debt.txt";
 
 function readDebt() {
   const entries = new Map();
