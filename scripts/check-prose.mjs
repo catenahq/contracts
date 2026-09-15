@@ -25,6 +25,26 @@
 //
 //   --all    report everything including debt, exit 0
 //
+//   --changed-since <ref>
+//            gate only on files this change touches, measured against the
+//            merge-base with <ref>. Everything else is still scanned and still
+//            printed, as advisory.
+//
+// WHY --changed-since EXISTS. Without it the gate asks "does this repository
+// have any finding", and a finding landing on the base branch fails every open
+// pull request until someone drains it. That is collateral: a dependency bump
+// touching one pinned version has no relationship to a comment somebody wrote
+// elsewhere, and the bump is what gets blamed. Six of the fifteen open
+// dependency PRs across this org were red that way at once.
+//
+// The absolute question still gets asked, on the push and cron runs of the
+// default branch, which is where accumulated prose debt belongs and where it
+// cannot be attributed to an unrelated contributor. Same split the image-CVE
+// gate already uses: delta on a pull request, absolute on a sweep.
+//
+// Reporting is deliberately NOT narrowed. A finding outside the diff still
+// prints, so nothing goes dark -- it simply does not decide the exit code.
+//
 // CATENA_VALE_BIN   vale binary (default: vale)
 // CATENA_VALE_BATCH files per invocation (default: 100)
 
@@ -44,6 +64,32 @@ const BATCH = Number(process.env.CATENA_VALE_BATCH || 100);
 const DEBT_FILE =
   [".ci/prose-debt.txt", ".github/prose-debt.txt"].find(existsSync) || "prose-debt.txt";
 const reportAll = process.argv.includes("--all");
+
+// --changed-since <ref>: the set of files allowed to FAIL this run. null means
+// every scanned file can (push, cron, and any local run without the flag).
+const changedSince = (() => {
+  const i = process.argv.indexOf("--changed-since");
+  if (i === -1) return null;
+  const ref = process.argv[i + 1];
+  if (!ref) {
+    console.error("--changed-since needs a git ref");
+    process.exit(2);
+  }
+  let base;
+  try {
+    base = execSync(`git merge-base HEAD ${ref}`, { encoding: "utf-8" }).trim();
+  } catch {
+    // No merge base reachable (a shallow clone, an unfetched ref). Gate on
+    // everything rather than on nothing: a scope that cannot be computed must
+    // not silently become empty.
+    console.error(`prose: no merge-base with ${ref}; gating on the whole tree`);
+    return null;
+  }
+  // Against the working tree, not HEAD, so an uncommitted fix counts as
+  // touched -- the same reason the image-pin scope compares that way.
+  const out = execSync(`git diff --name-only ${base}`, { encoding: "utf-8" });
+  return new Set(out.split("\n").map((l) => l.trim()).filter(Boolean));
+})();
 
 // Vale resolves StylesPath relative to the config file, so pointing at
 // the contracts checkout is enough to find vale/Catena/ inside it.
@@ -176,6 +222,7 @@ if (scratch) rmSync(scratch, { recursive: true, force: true });
 
 const debt = readDebt();
 const findings = [];
+const carried = [];
 const errorFiles = new Set();
 
 for (const [file, found] of alerts) {
@@ -183,14 +230,25 @@ for (const [file, found] of alerts) {
     if (a.Severity !== "error") continue;
     errorFiles.add(file);
     if (debt.has(file) && !reportAll) continue;
-    findings.push(`${file}:${a.Line}:${a.Span[0]}: ${a.Check}: ${a.Message}`);
+    const line = `${file}:${a.Line}:${a.Span[0]}: ${a.Check}: ${a.Message}`;
+    // Outside the change's own files: printed, never gating. Splitting here
+    // rather than skipping the scan is what keeps a pre-existing finding
+    // visible instead of trading one blind spot for another.
+    if (changedSince && !changedSince.has(file)) carried.push(line);
+    else findings.push(line);
   }
 }
 
 // An exemption for a file that is already clean gates nothing, and hides
-// the next regression on that file.
+// the next regression on that file. Computed from everything SCANNED, not
+// from the change's files: the whole tree is still scanned under
+// --changed-since, so a debt entry that has gone clean is still detected --
+// but only gate on it when the change touched that entry's file, or a
+// dependency bump inherits somebody else's bookkeeping.
 const inScope = new Set(files);
-const stale = [...debt.keys()].filter((f) => inScope.has(f) && !errorFiles.has(f));
+const staleAll = [...debt.keys()].filter((f) => inScope.has(f) && !errorFiles.has(f));
+const stale = changedSince ? staleAll.filter((f) => changedSince.has(f)) : staleAll;
+const staleCarried = staleAll.filter((f) => !stale.includes(f));
 
 const warnings = [...alerts.values()]
   .flat()
@@ -220,9 +278,26 @@ if (findings.length > 0 || stale.length > 0) {
     for (const f of stale) console.error("  " + f);
     console.error("Delete them, or the gate stops gating those files.");
   }
+  reportCarried();
   process.exit(1);
 }
 
+reportCarried();
 console.log(
   `Prose: clean (${files.length} file(s) scanned, ${debt.size} in debt, ${warnings} advisory warning(s)).`,
 );
+
+// What this change did not introduce and is not answerable for. Printed on
+// every outcome, pass or fail, so the debt stays in view of whoever is reading
+// the run instead of only surfacing once it blocks something.
+function reportCarried() {
+  if (!changedSince || (carried.length === 0 && staleCarried.length === 0)) return;
+  console.log("");
+  console.log(
+    `Carried prose debt, NOT this change's doing (${carried.length} finding(s), ` +
+      `${staleCarried.length} stale exemption(s)). The default branch's own ` +
+      "push and cron runs gate on these:",
+  );
+  for (const f of carried) console.log("  " + f);
+  for (const f of staleCarried) console.log(`  ${f}: stale exemption in ${DEBT_FILE}`);
+}
