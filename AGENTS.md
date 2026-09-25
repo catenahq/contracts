@@ -25,6 +25,7 @@ from there.
 
     node ../contracts/scripts/check-unicode.mjs   # unicode + banned words
     node ../contracts/scripts/check-prose.mjs     # comment prose
+    python3 contracts/scripts/trivy_gate.py ...   # image CVE verdict (CI jobs)
 
 Both take the CURRENT DIRECTORY as their scan scope, because they
 enumerate with `git ls-files`. That is how the ops sales job scopes
@@ -34,6 +35,7 @@ itself to one subtree by running from it.
 | --- | --- |
 | `scripts/check-unicode.mjs` | No em dashes, smart quotes or decorative Unicode, in any tracked file. Plus the banned-word scan. |
 | `scripts/check-prose.mjs` | Runs Vale over code comments. Batches, because Vale leaks a tree-sitter query per file and dies on a large tree. |
+| `scripts/trivy_gate.py` | The verdict on a Trivy image report: with `--baseline`, fail only on findings the change adds; without one, fail on any. Used by catena-admin and catena-templates image-scan jobs. Tested by `scripts/trivy_gate_test.py`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
 | `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |
 | `vale/Catena/*.yml` | The rules. Comments only: prose files record history on purpose. |

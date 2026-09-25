@@ -40,6 +40,8 @@ jobs:
         run: node brand/test.js
       - name: Validate JSON artifacts
         run: node scripts/validate-json.mjs
+      - name: Trivy gate tests
+        run: python3 scripts/trivy_gate_test.py
 
   duplication:
     # Copy-paste ratchet: .jscpd.json carries the baseline threshold;
