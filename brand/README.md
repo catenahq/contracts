@@ -32,12 +32,12 @@ brand/
 
 ## Use in a catena app
 
-In `package.json`:
+In `package.json`, with this repo checked out beside the consumer:
 
 ```json
 {
   "dependencies": {
-    "@catenahq/contracts": "github:catenahq/contracts#v0.1.0"
+    "@catenahq/contracts": "file:../contracts"
   }
 }
 ```
