@@ -5,9 +5,8 @@
 // legal/) and confirms each one parses. Also does the minimum
 // shape check per file documented in the per-directory READMEs.
 //
-// Full schema validation (AJV / TypeBox) is a follow-up; this script
-// catches the high-frequency class of regression (malformed JSON,
-// missing required key) with zero deps.
+// It catches malformed JSON and a missing or ill-typed required key,
+// with zero deps.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
@@ -57,13 +56,8 @@ function validateTiersJson(file, data) {
   const topLevelKeys = [
     "currency",
     "supportIncrementMinutes",
-    "customTemplateSetupCents",
-    "earlyTerminationFeeMultiplier",
-    "managedMinimumCommitmentMonths",
     "alacarteHourlyCents",
-    "components",
-    "supportPacks",
-    "installers",
+    "plan",
   ];
   if (!requireKeys(file, data, topLevelKeys, "top-level")) return;
   if (data.currency !== "CAD") return fail(file, `currency must be "CAD", got: ${data.currency}`);
@@ -76,40 +70,13 @@ function validateTiersJson(file, data) {
     }
   }
 
-  // components: server + app (both required)
-  if (!requireKeys(file, data.components, ["server", "app"], "components")) return;
-  for (const k of ["server", "app"]) {
-    const c = data.components[k];
-    if (!requireKeys(file, c, ["id", "displayName", "tagline", "monthlyPriceCents", "stripePriceId"], `components.${k}`)) return;
-    if (!requireBilingual(file, c.displayName, `components.${k}.displayName`)) return;
-    if (!requireBilingual(file, c.tagline, `components.${k}.tagline`)) return;
-    if (typeof c.monthlyPriceCents !== "number" || c.monthlyPriceCents <= 0) {
-      return fail(file, `components.${k}.monthlyPriceCents must be a positive number`);
-    }
-  }
-
-  // supportPacks: array (may be empty if à-la-carte-only)
-  if (!Array.isArray(data.supportPacks)) return fail(file, "supportPacks must be an array");
-  for (const [i, p] of data.supportPacks.entries()) {
-    if (!requireKeys(file, p, ["id", "displayName", "hours", "monthlyPriceCents", "stripePriceId"], `supportPacks[${i}]`)) return;
-    if (!requireBilingual(file, p.displayName, `supportPacks[${i}].displayName`)) return;
-    if (typeof p.hours !== "number" || p.hours <= 0) {
-      return fail(file, `supportPacks[${i}].hours must be a positive number`);
-    }
-    if (typeof p.monthlyPriceCents !== "number" || p.monthlyPriceCents <= 0) {
-      return fail(file, `supportPacks[${i}].monthlyPriceCents must be a positive number`);
-    }
-  }
-
-  // installers: array
-  if (!Array.isArray(data.installers)) return fail(file, "installers must be an array");
-  for (const [i, inst] of data.installers.entries()) {
-    if (!requireKeys(file, inst, ["id", "displayName", "tagline", "oneTimePriceCents", "stripePriceId"], `installers[${i}]`)) return;
-    if (!requireBilingual(file, inst.displayName, `installers[${i}].displayName`)) return;
-    if (!requireBilingual(file, inst.tagline, `installers[${i}].tagline`)) return;
-    if (typeof inst.oneTimePriceCents !== "number" || inst.oneTimePriceCents <= 0) {
-      return fail(file, `installers[${i}].oneTimePriceCents must be a positive number`);
-    }
+  // plan: the one flat retainer, priced per server
+  const plan = data.plan;
+  if (!requireKeys(file, plan, ["id", "displayName", "tagline", "monthlyPriceCents", "stripePriceId"], "plan")) return;
+  if (!requireBilingual(file, plan.displayName, "plan.displayName")) return;
+  if (!requireBilingual(file, plan.tagline, "plan.tagline")) return;
+  if (typeof plan.monthlyPriceCents !== "number" || plan.monthlyPriceCents <= 0) {
+    return fail(file, "plan.monthlyPriceCents must be a positive number");
   }
 
   ok(file);
