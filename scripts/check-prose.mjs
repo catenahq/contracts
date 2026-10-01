@@ -59,8 +59,8 @@ import { shellCommentSkeleton } from "./lib/shell-comments.mjs";
 const VALE = process.env.CATENA_VALE_BIN || "vale";
 const BATCH = Number(process.env.CATENA_VALE_BATCH || 100);
 // The debt file sits in .ci/ or .github/ where the scope has one, so gate
-// bookkeeping stays off a repo's landing page. A scope with neither, such
-// as ops/internal_docs/sales, keeps it at the top of that scope.
+// bookkeeping stays off a repo's landing page. A scope with neither keeps
+// it at the top of that scope.
 const DEBT_FILE =
   [".ci/prose-debt.txt", ".github/prose-debt.txt"].find(existsSync) || "prose-debt.txt";
 const reportAll = process.argv.includes("--all");
