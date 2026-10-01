@@ -1,17 +1,16 @@
 # catenahq/contracts
 
 Single source of truth for everything that more than one catena repo
-depends on. Each artifact here is a versioned contract; consumers
-pin a tag (or a git SHA) and bump it deliberately. Drift between
-repos is now a code review concern, not an invisible regression.
+depends on. Consumers read this repo as a sibling checkout, so one copy
+of each fact serves every repo.
 
 ## What lives here
 
 | Directory | Contract | Primary consumers |
 |-----------|----------|-------------------|
-| `brand/`  | Design tokens (CSS variables) + Conthrax wordmark binary + catena logo SVG | catenahq/website, catenahq/docs, catenahq/portal |
+| `brand/`  | Design tokens (CSS variables) + Conthrax wordmark binary + catena logo SVG | catenahq/website, catenahq/docs |
 | `pricing/`| Pricing metadata: one flat plan (monthly price per server) plus the a-la-carte hourly rates and their billing increment | catenahq/website (renders the plan price in its pricing matrix) |
-| `legal/`  | Canonical MSA markdown + version pin (commit SHA) + effective date + published URL | catenahq/portal (terms_version column + checkbox), catenahq/website (renders `/legal/master-agreement`) |
+| `legal/`  | Canonical MSA markdown + version pin (commit SHA) + effective date + published URL | catenahq/website (renders `/legal/master-agreement`) |
 
 Add a new directory whenever a fact lives in more than one repo. Do
 NOT add app-specific copy, operator-only configuration, or anything
@@ -20,8 +19,8 @@ belong in the consuming repo until they stabilize.
 
 ## How consumers depend on it
 
-Each web consumer (website, docs, portal) declares a sibling-directory
-read in its `package.json`:
+Each web consumer (website, docs) declares a sibling-directory read in
+its `package.json`:
 
 ```json
 {
@@ -33,11 +32,11 @@ read in its `package.json`:
 
 npm symlinks `node_modules/@catenahq/contracts` to the sibling
 checkout, so an edit here is visible on the consumer's next dev/build.
-CI mirrors the layout: each consumer's workflow checks out this repo
-alongside itself using a read-only `CONTRACTS_READ_TOKEN`. There is no
-vendored tarball and no freshness gate; to roll out a change, push
-here, then push (or re-run CI on) whichever consumer needs the new
-value. Tags still mark deliberate versions for humans (see Bump).
+CI mirrors the layout: each consumer's workflow checks this repo out
+alongside itself with `.github/actions/checkout-sibling`, at the branch
+the consumer runs on when this repo has it, else at the default branch.
+The scripts under `scripts/` (unicode, prose and repo-rule gates) run
+from that checkout the same way.
 
 Direct file imports:
 
@@ -58,27 +57,16 @@ CSS:
 @import "@catenahq/contracts/brand/tokens/all.css";
 ```
 
-## How to bump a contract
+## How to change a contract
 
-1. Open a PR against this repo.
-2. Update the relevant artifact (e.g. `pricing/tiers.json`).
-3. Bump `version` in `package.json` to the next semver:
-   - major if any shape changes (breaking)
-   - minor for new keys / new files
-   - patch for value-only bumps
-4. CI validates JSON parses and `brand/test.js` still passes.
-5. Merge to main.
-6. Tag the merge commit: `git tag -a vX.Y.Z -m "..." && git push --tags`.
-7. Consumers pick the change up automatically on their next build
-   (sibling read; CI re-clones this repo fresh on every run). Re-run
-   or push each consumer whose rendered output should change, and
-   verify it consumed the new value (e.g. the ops sizing docs match
-   the new `tiers.json`).
-
-Why sibling-read, not vendoring: one read-only token per consumer
-(scoped to this repo) and zero copy-sync machinery. The trade-off is
-that consumers always build against latest main -- a breaking shape
-change must land together with its consumer migrations.
+1. Update the artifact (e.g. `pricing/tiers.json`) and run this repo's
+   gates: `npm test`, `npm run check:unicode`, `npm run check:prose`.
+2. Run each consumer's own gates against the change: they read this
+   checkout, so the change reaches them on their next build.
+3. Put a change that consumers must follow on a branch of the same name
+   in each repo. CI checks each sibling out at the consumer's branch, so
+   the change and its consumer migrations are tested together and land
+   together.
 
 ## What does NOT live here
 

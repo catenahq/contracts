@@ -10,10 +10,7 @@
 // The list is DATA, read from banned-words.json next to this checkout.
 // That file is rendered from ops/automation/audit/banned-words.yml, which
 // carries the rationale for each entry and is the manifest the Python
-// audit reads. Before that, this script carried a hand-maintained copy of
-// the list, and the two had drifted: the copy was missing five tokens and
-// matched with \b, which anchors in the wrong place for a token carrying
-// punctuation such as cal.com or vault.sops.yml.
+// audit reads, so the two cannot drift.
 //
 // ONE COPY. This script lives here and nowhere else. A consumer repo
 // runs it out of the sibling contracts checkout:

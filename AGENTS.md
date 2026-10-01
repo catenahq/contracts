@@ -5,8 +5,9 @@ depends on. See README.md for the layout + consumer model.
 
 ## Edit rules
 
-- Every change is a deliberate version bump. Tag a `vX.Y.Z` release
-  on every merge to main; consumers pull via that tag.
+- Consumers read this repo as a sibling checkout at their own branch, so
+  a change reaches every consumer on its next build: run the consumers'
+  gates before committing (README.md, "How to change a contract").
 - Do not add app-specific copy, operator-only config, or anything
   with an unstable shape. Promote to a contract only once the same
   fact lives in two or more repos.
@@ -23,18 +24,28 @@ Every catena repo runs these, and they exist ONLY here. A consumer holds
 no copy: its CI checks this repo out alongside it and runs the script
 from there.
 
-    node ../contracts/scripts/check-unicode.mjs   # unicode + banned words
-    node ../contracts/scripts/check-prose.mjs     # comment prose
-    python3 contracts/scripts/trivy_gate.py ...   # image CVE verdict (CI jobs)
+    node ../contracts/scripts/check-unicode.mjs     # unicode + banned words
+    node ../contracts/scripts/check-prose.mjs       # comment prose
+    node ../contracts/scripts/check-repo-rules.mjs  # repo rules (env files)
+    python3 contracts/scripts/trivy_gate.py ...     # image CVE verdict (CI jobs)
 
-Both take the CURRENT DIRECTORY as their scan scope, because they
+The node scripts take the CURRENT DIRECTORY as their scope, because they
 enumerate with `git ls-files`. That is how the ops sales job scopes
 itself to one subtree by running from it.
+
+CI checks this repo out with `.github/actions/checkout-sibling`, which
+every workflow uses for every cross-repo checkout: no workflow resolves
+a sibling's branch on its own. A `uses:` line is read before expressions
+are evaluated, so first-party actions and reusable workflows are named
+`@main`; that is the only branch name a workflow holds outside its
+`on:` triggers and run conditions.
 
 | Path | What it is |
 | --- | --- |
 | `scripts/check-unicode.mjs` | No em dashes, smart quotes or decorative Unicode, in any tracked file. Plus the banned-word scan. |
 | `scripts/check-prose.mjs` | Runs Vale over code comments. Batches, because Vale leaks a tree-sitter query per file and dies on a large tree. |
+| `scripts/check-repo-rules.mjs` | Rules every repo keeps: the root `.gitignore` carries the env-file rule and no real env file is tracked. |
+| `.github/actions/checkout-sibling/` | Checks out a sibling repo at the branch the run is on (same name, else a pull request's base, else the default branch). |
 | `scripts/trivy_gate.py` | The verdict on a Trivy image report: with `--baseline`, fail only on findings the change adds; without one, fail on any. Used by catena-admin and catena-templates image-scan jobs. Tested by `scripts/trivy_gate_test.py`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
 | `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |
@@ -73,25 +84,10 @@ Checklist before merging:
 5. Initial values + at least one consumer wired up in the same PR
    (proves the contract is actually consumed).
 
-## Versioning
-
-- Patch: value change only (e.g. update `legal/msa.json.version` to a
-  new commit SHA).
-- Minor: new key, new file, additive consumer-safe change.
-- Major: breaking shape change. Coordinate consumer migrations in
-  the PR description.
-
-## Brand assets
-
-`brand/` was historically vendored into each app via a `sync-brand.mjs`
-script. Post-split, this repo is the source of truth; apps depend on
-it via npm-style import. The `sync-brand.mjs` mechanism stays
-documented for backward compatibility but is being phased out.
-
 ## Security invariants (machine-enforced -- do not weaken silently)
 
 - This repo is PUBLIC and canonical for legal/pricing/brand: no
-  secrets, no operator config, no client data, ever (gitleaks on every
-  change; full-history scan was clean at publication).
-- Every merge is a deliberate semver bump + tag; legal text changes
-  only through that flow (msa.json SHA pin is what clients accepted).
+  secrets, no operator config, no client data, ever (gitleaks scans
+  the whole history on every change).
+- Legal text changes only together with its pin in `legal/msa.json`:
+  the pinned version is what clients accepted.

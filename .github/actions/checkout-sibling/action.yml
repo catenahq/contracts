@@ -1,0 +1,83 @@
+name: checkout-sibling
+description: >-
+  Check out a sibling catenahq repo at the branch this run is on. The sibling's
+  branch of the same name when it has one; on a pull request, then the base
+  branch; else the sibling's default branch.
+
+inputs:
+  repository:
+    description: owner/name of the sibling repo.
+    required: true
+  path:
+    description: Where to check it out, relative to the workspace.
+    required: true
+  branch:
+    description: >-
+      The branch to look for first, in place of the run's own (a tag push has
+      no branch; the release guard names the one it verified).
+    default: ''
+  token:
+    description: Token that can read the sibling (a private sibling needs more than the default).
+    default: ${{ github.token }}
+  fetch-depth:
+    description: Passed to actions/checkout.
+    default: '1'
+  persist-credentials:
+    description: Passed to actions/checkout.
+    default: 'false'
+
+outputs:
+  ref:
+    description: The branch checked out, or empty for the sibling's default branch.
+    value: ${{ steps.resolve.outputs.ref }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        REPOSITORY: ${{ inputs.repository }}
+        TOKEN: ${{ inputs.token }}
+        BRANCH: ${{ inputs.branch }}
+        EVENT: ${{ github.event_name }}
+        HEAD_REF: ${{ github.head_ref }}
+        BASE_REF: ${{ github.base_ref }}
+        REF_NAME: ${{ github.ref_name }}
+        REF_TYPE: ${{ github.ref_type }}
+      run: |
+        set -euo pipefail
+        candidates=()
+        if [ -n "$BRANCH" ]; then
+          candidates+=("$BRANCH")
+        elif [ "$EVENT" = pull_request ] || [ "$EVENT" = pull_request_target ]; then
+          candidates+=("$HEAD_REF" "$BASE_REF")
+        elif [ "$REF_TYPE" = branch ]; then
+          candidates+=("$REF_NAME")
+        fi
+        # The token travels in the environment, never on a command line.
+        if [ -n "$TOKEN" ]; then
+          auth="$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
+        fi
+        ref=""
+        for c in "${candidates[@]}"; do
+          [ -n "$c" ] || continue
+          found="$(git ls-remote --heads "https://github.com/$REPOSITORY.git" "refs/heads/$c")"
+          if [ -n "$found" ]; then
+            ref="$c"
+            break
+          fi
+        done
+        echo "$REPOSITORY: ${ref:-default branch}"
+        echo "ref=$ref" >> "$GITHUB_OUTPUT"
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      with:
+        repository: ${{ inputs.repository }}
+        ref: ${{ steps.resolve.outputs.ref }}
+        path: ${{ inputs.path }}
+        token: ${{ inputs.token }}
+        fetch-depth: ${{ inputs.fetch-depth }}
+        persist-credentials: ${{ inputs.persist-credentials }}
