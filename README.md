@@ -10,7 +10,7 @@ repos is now a code review concern, not an invisible regression.
 | Directory | Contract | Primary consumers |
 |-----------|----------|-------------------|
 | `brand/`  | Design tokens (CSS variables) + Conthrax wordmark binary + catena logo SVG | catenahq/website, catenahq/docs, catenahq/portal |
-| `pricing/`| Composable pricing metadata (server + per-app monthly components, installers, a-la-carte hourly rates, ETF multiplier, minimum commitment -- no tier ladder since v1.0.0) | catenahq/ops (sizing-doc generator; today's only code consumer), catenahq/website (hand-synced pricing matrix -- the site is the offer master), catenahq/portal (intended, not yet wired) |
+| `pricing/`| Pricing metadata: one flat plan (monthly price per server) plus the a-la-carte hourly rates and their billing increment | catenahq/website (renders the plan price in its pricing matrix) |
 | `legal/`  | Canonical MSA markdown + version pin (commit SHA) + effective date + published URL | catenahq/portal (terms_version column + checkbox), catenahq/website (renders `/legal/master-agreement`) |
 
 Add a new directory whenever a fact lives in more than one repo. Do
@@ -38,8 +38,6 @@ alongside itself using a read-only `CONTRACTS_READ_TOKEN`. There is no
 vendored tarball and no freshness gate; to roll out a change, push
 here, then push (or re-run CI on) whichever consumer needs the new
 value. Tags still mark deliberate versions for humans (see Bump).
-catenahq/ops consumes `pricing/tiers.json` the same sibling-path way
-from `generate-sizing-doc.py`.
 
 Direct file imports:
 

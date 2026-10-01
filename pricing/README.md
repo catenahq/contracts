@@ -63,21 +63,3 @@ build and nothing else.
   and land the website migration in the same push -- consumers build
   against latest main, so a breaking change with no consumer migration
   breaks the site.
-
-## History
-
-- v3.0.0 (2026-08-26): the composable model is gone. Catena Pro is a
-  **flat $100/month per server** with unlimited apps. Removed the
-  per-app component (`components.app`), the `components` wrapper itself
-  (one plan is not a composition), the installer fees, the delisted
-  `supportPacks` field, `customTemplateSetupCents`,
-  `earlyTerminationFeeMultiplier` and `managedMinimumCommitmentMonths`.
-  A-la-carte hourly support is the only thing billed outside the
-  retainer. The file had carried the dead server-plus-per-app model for
-  months while the website's own matrix advertised unlimited apps.
-- v2.0.0 (2026-07-11): repo slim at first public release. Dropped the
-  never-consumed `tiers.d.ts` and the unused `brand/src/` JS entry.
-- v1.0.1 (2026-06-12): support packs delisted; all support time bills at
-  `alacarteHourlyCents`.
-- v1.0.0 (2026-05-21): composable model, replacing the v0.3.x named-tier
-  ladder (Base / Assisted / Small / Medium / Large).

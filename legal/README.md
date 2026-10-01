@@ -66,6 +66,6 @@ Consumers:
 2. Commit + merge to main. Note the resulting commit SHA.
 3. Open a follow-up PR updating `msa.json.version` to that SHA and
    bumping `effectiveDate`.
-4. Tag a patch release (e.g. 0.2.0 -> 0.2.1). Consumers build against
+4. Tag a patch release (e.g. 1.2.3 -> 1.2.4). Consumers build against
    latest main via the sibling read; re-run/redeploy the website so
    the rendered version pin updates.
