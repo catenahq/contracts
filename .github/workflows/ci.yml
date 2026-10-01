@@ -38,6 +38,8 @@ jobs:
           fi
       - name: Unicode hygiene (no em dashes / smart quotes / decorative symbols)
         run: node scripts/check-unicode.mjs
+      - name: Repo rules (no tracked env file; .gitignore carries the env rule)
+        run: node scripts/check-repo-rules.mjs
       - name: Run brand smoke test
         run: node brand/test.js
       - name: Validate JSON artifacts
