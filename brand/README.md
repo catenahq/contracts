@@ -24,6 +24,7 @@ brand/
     spacing.css      4px-grid spacing, radii, shadows, content widths
     all.css          single-import entry that pulls in the three above
   theme.css          Tailwind CSS v4 @theme mapping the tokens to utilities
+  fonts.mjs          the Astro Fonts API entry that self-hosts Inter
   wordmark/
     conthrax.css     @font-face for "Conthrax", relative url() to assets/
   assets/
@@ -61,6 +62,19 @@ It names the semantic utilities (`bg-page`, `text-heading`,
 `text-muted`, `border-line`, `text-link`, `bg-primary`, ...) and the
 `btn-primary` / `btn-secondary` / `btn-tertiary` pill buttons once, for
 every site that styles with Tailwind.
+
+Its sans and heading fonts are Inter, which the site self-hosts through
+the Astro Fonts API with the shared entry in `fonts.mjs`:
+
+```js
+// astro.config.mjs
+import { fontProviders } from "astro/config";
+import { inter } from "@catenahq/contracts/brand/fonts.mjs";
+export default defineConfig({ fonts: [inter(fontProviders)] /* ... */ });
+```
+
+and renders `<Font cssVariable="--font-inter" preload />` (from
+`astro:assets`) in its `<head>`.
 
 ## Light and dark
 

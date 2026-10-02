@@ -1,9 +1,10 @@
 /* @catena/brand -- Tailwind CSS v4 theme over the catena tokens.
  *
  * Import it from a Tailwind entry, after `@import "tailwindcss"`, in a page
- * that also loads tokens/all.css. `inline` makes every utility read the
- * catena variable where it is used, so a `.dark` or `[data-theme="dark"]`
- * ancestor (tokens/colors.css) restyles everything under it.
+ * that also loads tokens/all.css and Inter (fonts.mjs, which names it
+ * --font-inter). `inline` makes every utility read the catena variable where
+ * it is used, so a `.dark` or `[data-theme="dark"]` ancestor
+ * (tokens/colors.css) restyles everything under it.
  *
  * Utilities it adds: bg-page, bg-page-muted, text-heading, text-default,
  * text-muted, border-line, text-link, the brand colors as
@@ -26,8 +27,8 @@
   --color-link: var(--catena-link);
   --color-link-hover: var(--catena-link-hover);
 
-  --font-sans: var(--catena-font-sans);
-  --font-heading: var(--catena-font-sans);
+  --font-sans: var(--font-inter), var(--catena-font-sans);
+  --font-heading: var(--font-inter), var(--catena-font-sans);
   --font-mono: var(--catena-font-mono);
   --font-wordmark: "Conthrax", var(--catena-font-sans);
 }
