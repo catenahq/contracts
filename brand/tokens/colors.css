@@ -55,9 +55,14 @@
   --catena-link-hover:       var(--catena-primary-700);
 }
 
-/* Dark scheme: mirror, not invert. Same accent, neutrals slid down. */
+/* Dark scheme: mirror, not invert. Same accent, neutrals slid down.
+   A visitor's explicit choice wins: `.dark` (the website's theme toggle)
+   or `[data-theme="dark"]` (Starlight's) applies it, and `.light` or
+   `[data-theme="light"]` keeps the light scheme on a dark OS. With
+   neither, the OS preference decides. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light):not([data-theme="light"]) {
+    color-scheme: dark;
     --catena-surface-bg:       var(--catena-neutral-900);
     --catena-surface-bg-muted: var(--catena-neutral-800);
     --catena-surface-fg:       var(--catena-neutral-50);
@@ -66,4 +71,16 @@
     --catena-link:             var(--catena-primary-300);
     --catena-link-hover:       var(--catena-primary-200);
   }
+}
+
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --catena-surface-bg:       var(--catena-neutral-900);
+  --catena-surface-bg-muted: var(--catena-neutral-800);
+  --catena-surface-fg:       var(--catena-neutral-50);
+  --catena-surface-fg-muted: var(--catena-neutral-300);
+  --catena-surface-border:   var(--catena-neutral-700);
+  --catena-link:             var(--catena-primary-300);
+  --catena-link-hover:       var(--catena-primary-200);
 }

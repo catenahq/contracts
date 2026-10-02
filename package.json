@@ -8,6 +8,7 @@
     "./brand/tokens/*": "./brand/tokens/*",
     "./brand/wordmark/*": "./brand/wordmark/*",
     "./brand/assets/*": "./brand/assets/*",
+    "./brand/theme.css": "./brand/theme.css",
     "./pricing/tiers.json": "./pricing/tiers.json",
     "./legal/msa.json": "./legal/msa.json",
     "./legal/master-agreement.md": "./legal/master-agreement.md",

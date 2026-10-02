@@ -1,7 +1,8 @@
 # brand/
 
-Catena design tokens (colors, typography, spacing, breakpoints) +
-the Conthrax wordmark binary + the catena logo SVG. Single source
+Catena design tokens (colors, typography, spacing, breakpoints), their
+Tailwind CSS theme, the Conthrax wordmark binary + the catena logo SVG.
+Single source
 of truth across every client-facing catena repo; consumers import
 via the `@catenahq/contracts` npm dep.
 
@@ -22,6 +23,7 @@ brand/
     typography.css   font stacks, type scale, line heights, weights
     spacing.css      4px-grid spacing, radii, shadows, content widths
     all.css          single-import entry that pulls in the three above
+  theme.css          Tailwind CSS v4 @theme mapping the tokens to utilities
   wordmark/
     conthrax.css     @font-face for "Conthrax", relative url() to assets/
   assets/
@@ -48,6 +50,26 @@ In CSS:
 @import "@catenahq/contracts/brand/tokens/all.css";
 @import "@catenahq/contracts/brand/wordmark/conthrax.css";  /* only if you render the wordmark */
 ```
+
+In a Tailwind CSS v4 entry, after `@import "tailwindcss"`:
+
+```css
+@import "@catenahq/contracts/brand/theme.css";
+```
+
+It names the semantic utilities (`bg-page`, `text-heading`,
+`text-muted`, `border-line`, `text-link`, `bg-primary`, ...) once, for
+every site that styles with Tailwind.
+
+## Light and dark
+
+The surface and link tokens switch to the dark scheme on an explicit
+choice, `.dark` or `[data-theme="dark"]` on any ancestor, and fall back
+to the OS preference only when the page carries neither that nor
+`.light` / `[data-theme="light"]`. A site with a theme toggle sets one of
+those on `<html>`; a site without one gets the OS scheme.
+
+## Assets
 
 The logo SVG is consumable as a build-time asset import:
 
