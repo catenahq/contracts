@@ -27,7 +27,6 @@ from there.
     node ../contracts/scripts/check-unicode.mjs     # unicode + banned words
     node ../contracts/scripts/check-prose.mjs       # comment prose
     node ../contracts/scripts/check-repo-rules.mjs  # repo rules (env files, branch names)
-    python3 contracts/scripts/trivy_gate.py ...     # image CVE verdict (CI jobs)
 
 The node scripts take the CURRENT DIRECTORY as their scope, because they
 enumerate with `git ls-files`. That is how the ops sales job scopes
@@ -46,7 +45,6 @@ are evaluated, so first-party actions and reusable workflows are named
 | `scripts/check-prose.mjs` | Runs Vale over code comments. Batches, because Vale leaks a tree-sitter query per file and dies on a large tree. |
 | `scripts/check-repo-rules.mjs` | Rules every repo keeps: the root `.gitignore` carries the env-file rule and no real env file is tracked; no workflow or script names a branch where something is checked out, installed or compared, and no catenahq link names one. |
 | `.github/actions/checkout-sibling/` | Checks out a sibling repo at the branch the run is on (same name, else a pull request's base, else the default branch). |
-| `scripts/trivy_gate.py` | The verdict on a Trivy image report: with `--baseline`, fail only on findings the change adds; without one, fail on any. Used by catena-admin and catena-templates image-scan jobs. Tested by `scripts/trivy_gate_test.py`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
 | `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |
 | `vale/Catena/*.yml` | The rules. Comments only: prose files record history on purpose. |
