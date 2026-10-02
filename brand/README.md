@@ -58,7 +58,8 @@ In a Tailwind CSS v4 entry, after `@import "tailwindcss"`:
 ```
 
 It names the semantic utilities (`bg-page`, `text-heading`,
-`text-muted`, `border-line`, `text-link`, `bg-primary`, ...) once, for
+`text-muted`, `border-line`, `text-link`, `bg-primary`, ...) and the
+`btn-primary` / `btn-secondary` / `btn-tertiary` pill buttons once, for
 every site that styles with Tailwind.
 
 ## Light and dark
@@ -78,10 +79,11 @@ import logoUrl from "@catenahq/contracts/brand/assets/logo.svg";
 // logoUrl resolves to a fingerprinted path under the consumer's build output.
 ```
 
-For browser-tab favicons, copy the asset into the consumer's
-`public/` at install time (see each app's `postinstall` script).
-Browsers fetch `/favicon.svg` from a fixed path, which is outside
-the bundler's URL rewrite scope.
+For browser-tab favicons, `scripts/sync-brand-assets.mjs` copies the
+logo to the consumer's `public/favicon.svg`; each site runs it as its
+`postinstall` (`node ../contracts/scripts/sync-brand-assets.mjs`).
+Browsers fetch `/favicon.svg` from a fixed path, which is outside the
+bundler's URL rewrite scope.
 
 ## Swap the accent color
 
