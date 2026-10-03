@@ -53,7 +53,7 @@ const MANIFEST = join(resolve(dirname(fileURLToPath(import.meta.url)), ".."), "b
 //
 // Bare "age" is deliberately absent from the manifest: it is a substring
 // of ordinary English. The gated tokens are the ones that can only mean
-// the retired system.
+// the banned system.
 function boundary(token, stem) {
   const literal = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const tail = stem ? "" : "(?![0-9A-Za-z_])";
@@ -84,8 +84,8 @@ const BANNED_WORDS = loadBanned();
 
 // Files exempt from the banned-word scan, one `path -- reason` per line.
 // Two kinds of entry earn a place: an operator-private decision log
-// that names a retired system and records WHY it went, and a file whose
-// migration is scheduled but not done.
+// that names a banned system and records WHY Catena does not ship it, and
+// a file whose migration is scheduled but not done.
 //
 // Unicode hygiene still applies to a listed file; only the banned-word
 // scan is skipped.

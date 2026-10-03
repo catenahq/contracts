@@ -4,8 +4,8 @@
 //
 // BATCHING. Vale's tree-sitter binding allocates a query per file and
 // does not release it, so memory grows with the number of files in one
-// invocation: 659 Python files reached 3 GB and was still climbing, and
-// under a 2 GiB cap it aborts with "tree-sitter failed to allocate".
+// invocation: hundreds of Python files take gigabytes, and under a 2 GiB
+// cap it aborts with "tree-sitter failed to allocate".
 // Files therefore go in batches, and each batch is its own process.
 //
 // DEBT. Vale has no way to fail on an exemption that has stopped being
@@ -34,8 +34,7 @@
 // have any finding", and a finding landing on the base branch fails every open
 // pull request until someone drains it. That is collateral: a dependency bump
 // touching one pinned version has no relationship to a comment somebody wrote
-// elsewhere, and the bump is what gets blamed. Six of the fifteen open
-// dependency PRs across this org were red that way at once.
+// elsewhere, and the bump is what gets blamed.
 //
 // The absolute question still gets asked, on the push and cron runs of the
 // default branch, which is where accumulated prose debt belongs and where it
