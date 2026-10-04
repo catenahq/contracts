@@ -71,6 +71,41 @@ under `.github/`; a scope that is a subtree rather than a repo, such as
 public, and the manifest's replacement prose is operator-facing: it names
 on-box paths and states what protects the panel binary. Keep it out.
 
+A rule change re-seeds every consumer's `prose-debt.txt`: regenerate it
+from a fresh `check-prose.mjs --all` run rather than editing it by hand.
+A rule whose count will not fall is describing the language, not a
+defect.
+
+## The standard the comment gate stands for
+
+A comment describes the code as it stands. What the code did before, and
+why that changed, belongs in the commit message. The rules match tokens,
+so they find the tense and miss the subject: a comment can pass them and
+still document a system that is gone.
+
+- Restate a design's reasoning as the rule the code holds now. Deleting
+  a comment because it is phrased as a story loses the reasoning.
+- Do not launder the chronology into a counterfactual. "X rather than
+  Y" and "doing Y would cause Z" pass the rules and keep the ghost: the
+  reader still has to reconstruct an absent design. The test is whether
+  the comment stands alone for someone who never saw the old shape.
+- A "would" aimed at an edit the reader might make (re-adding a probe,
+  reversing a merge order) is fine.
+- Keep the evidence: the error string or failure a guard exists for is
+  what makes it trustworthy. Test docstrings state the invariant guarded,
+  with the regression as evidence.
+- Delete prose about a thing that does not exist; do not rewrite it to
+  say the thing is absent. Search a file for the names of retired systems
+  when working in it, since the rules do not see them.
+
+About a third of findings are the rule catching another sense of the same
+words. Debt these with the reason rather than rewriting them:
+
+- "used to" meaning "in order to" in the active voice;
+- runtime state ("fails if the live findings no longer match");
+- live data, such as a date identifying rows in a database;
+- upstream version facts ("the Synapse default from 1.0 onward").
+
 ## Add a new contract directory
 
 Checklist before merging:
