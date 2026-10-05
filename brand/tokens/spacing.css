@@ -2,7 +2,7 @@
  *
  * 4px grid. Every spacing variable is a multiple of --catena-space-1.
  * Tailwind-compatible names so the variables drop into a Tailwind
- * config (apps/portal) without mental remap.
+ * config without mental remap.
  */
 
 :root {
