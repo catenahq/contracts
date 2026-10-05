@@ -62,12 +62,9 @@ function validateTiersJson(file, data) {
   if (!requireKeys(file, data, topLevelKeys, "top-level")) return;
   if (data.currency !== "CAD") return fail(file, `currency must be "CAD", got: ${data.currency}`);
 
-  // alacarteHourlyCents: { day, evening, night }
-  if (!requireKeys(file, data.alacarteHourlyCents, ["day", "evening", "night"], "alacarteHourlyCents")) return;
-  for (const k of ["day", "evening", "night"]) {
-    if (typeof data.alacarteHourlyCents[k] !== "number" || data.alacarteHourlyCents[k] <= 0) {
-      return fail(file, `alacarteHourlyCents.${k} must be a positive number`);
-    }
+  // alacarteHourlyCents: the one business-hours rate
+  if (typeof data.alacarteHourlyCents !== "number" || data.alacarteHourlyCents <= 0) {
+    return fail(file, "alacarteHourlyCents must be a positive number");
   }
 
   // plan: the one flat retainer, priced per server

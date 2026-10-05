@@ -1,11 +1,7 @@
 {
   "currency": "CAD",
   "supportIncrementMinutes": 15,
-  "alacarteHourlyCents": {
-    "day": 15000,
-    "evening": 22500,
-    "night": 30000
-  },
+  "alacarteHourlyCents": 15000,
   "plan": {
     "id": "pro",
     "displayName": { "en": "Catena Pro", "fr": "Catena Pro" },

@@ -2,8 +2,8 @@
 
 The paid offer, as one flat plan: Catena Pro, a monthly retainer per
 server with unlimited apps. Plus the two operator-wide knobs that are
-not part of the plan price -- the a-la-carte hourly rates by time of day
-and the billing increment they round to.
+not part of the plan price -- the a-la-carte hourly rate, for support
+during business hours, and the billing increment it rounds to.
 
 Consumers:
 
@@ -27,11 +27,7 @@ build and nothing else.
 {
   "currency": "CAD",
   "supportIncrementMinutes": <int>,
-  "alacarteHourlyCents": {
-    "day": <int>,
-    "evening": <int>,
-    "night": <int>
-  },
+  "alacarteHourlyCents": <int, > 0>,
   "plan": {
     "id": "pro",
     "displayName": { "en": "...", "fr": "..." },
@@ -56,7 +52,7 @@ build and nothing else.
 
 ## Bump
 
-- Price change (`monthlyPriceCents`, any `alacarteHourlyCents.*`): cut a
+- Price change (`monthlyPriceCents`, `alacarteHourlyCents`): cut a
   **patch** release.
 - New optional top-level field: cut a **minor** release.
 - Shape change (renamed field, removed field): cut a **major** release
