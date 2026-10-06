@@ -1,7 +1,7 @@
 # Service Level Agreement (Schedule A)
 
-**Version:** 1.0
-**Last reviewed:** 2026-05-07
+**Version:** 1.1
+**Last reviewed:** 2026-10-06
 
 > Schedule A to the [Master Services Agreement](master-agreement.md).
 > Single SLA for any Suite with an active Server Subscription;
@@ -74,7 +74,7 @@ Pack and agreeing reduced response times in writing in the Order
 Form; absent that, the table above applies regardless of Support
 Pack size.
 
-Legend: **BH** = business hour (Monday-Friday, 09:00-17:00 Eastern,
+Legend: **BH** = business hour (Monday-Friday, 08:00-17:00 Eastern,
 Quebec public holidays excluded); **BD** = business day (same
 schedule); **NBD** = next business day on a best-effort basis.
 
@@ -87,8 +87,9 @@ with confirmed data loss:
 - **Recovery Point Objective (RPO):** 24 hours (daily Restic
   snapshot cadence).
 - **Recovery Time Objective (RTO):** 8 business hours from the
-  start of recovery work to "Suite Up" on a fresh VPS (the
-  documented `catena recover` flow).
+  start of recovery work to "Suite Up" on a fresh VPS (a Catena
+  install followed by a restore from its administration panel, as
+  documented).
 
 Quarterly restore drills validate these objectives. The most recent
 drill date is recorded in the Operator's audit log.
@@ -96,8 +97,9 @@ drill date is recorded in the Operator's audit log.
 ## 6. Maintenance windows
 
 6.1 **Scheduled maintenance** is announced at least 48 hours in
-advance via the portal and the Operator's status channel. Maintenance
-windows do not count toward Downtime.
+advance by email to the Client's address on file and on the
+Operator's status channel. Maintenance windows do not count toward
+Downtime.
 
 6.2 **Emergency maintenance** for security patches with a published
 CVSS score of 9.0 or higher may be performed without 48-hour notice;
@@ -130,9 +132,10 @@ in any month is capped at 25% of that month's monthly fee.
 
 ## 8. Reporting
 
-The Client may request a monthly uptime report via the portal. The
-report is generated from Operator-side monitoring (Gatus + the
-self-hosted Healthchecks instance) and is provided as a PDF or CSV.
+The Client may request a monthly uptime report through the Operator's
+helpdesk. The report is generated from the Suite's own monitoring
+(Gatus and Healthchecks, on the Client's server) and is provided as a
+PDF or CSV.
 
 ## 9. Out-of-scope
 

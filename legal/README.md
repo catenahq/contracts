@@ -2,14 +2,12 @@
 
 Canonical commercial-agreement texts. Every file here is referenced
 by an executed Master Services Agreement and rendered verbatim on the
-website / linked from the portal. Operator-private templates
-(acceptance-tracking, breach-response, internal DPA template, loi25
-reference material) live in the ops repo under
-`ops/internal_docs/compliance/`, NOT here.
+website. Operator-private templates (acceptance-tracking,
+breach-response, internal DPA template, loi25 reference material) live
+in the ops repo under `ops/internal_docs/compliance/`, NOT here.
 
 - `master-agreement.md` -- the canonical English MSA text. Single
-  source of truth; rendered verbatim on the website and referenced
-  from the portal's terms-acceptance checkbox.
+  source of truth; rendered verbatim on the website.
 - `sla.md` -- Schedule A. Service Level Agreement (uptime + response
   targets). Appended to every executed MSA.
 - `subprocessors.md` -- Schedule D. Subprocessor list disclosing the
@@ -20,23 +18,19 @@ reference material) live in the ops repo under
   procedure + termination effects, satisfying MSA section 6.2
   (portability) and 9.4 (post-termination).
 - `msa.json` -- version pin (commit SHA), effective date, source +
-  published URLs. The portal writes `msa.version` into
-  `installations.terms_version` at order submit so each row pins to
-  the exact text the client accepted.
+  published URLs. The operator records `msa.version` against the
+  client's acceptance in its client records, so each client pins to
+  the exact text accepted (`ops/internal_docs/compliance/acceptance-tracking.md`).
 
 Consumers:
 
-- **catenahq/portal**: writes `installations.terms_version` =
-  `msa.version` at order submit; the OrderForm checkbox links to
-  the published URLs.
 - **catenahq/website**: renders `master-agreement.md` at
-  `/legal/master-agreement` (FR + EN) with `version` +
-  `effectiveDate` in the footer, and the schedules (`sla.md`,
-  `subprocessors.md`, `data-export-and-termination.md`) at
-  `/legal/sla`, `/legal/subprocessors`,
-  `/legal/data-export-and-termination` (FR + EN). The canonical
-  text stays here; the pages render it verbatim with cross-schedule
-  links rewritten to the site routes.
+  `/{en,fr}/legal/master-agreement` with `version` + `effectiveDate`
+  above the text, and the schedules (`sla.md`, `subprocessors.md`,
+  `data-export-and-termination.md`) at `/{en,fr}/legal/<doc>`
+  (`website/src/pages/[locale]/legal/[doc].astro`). The canonical text
+  stays here; the pages render it verbatim with cross-schedule links
+  rewritten to the site routes.
 
 ## Schema
 
@@ -57,8 +51,7 @@ Consumers:
   master-agreement.md was added).
 - `effectiveDate` is the date the client-acceptance flow started
   presenting this version. It is NOT necessarily the commit date.
-- `publishedUrl` is `https://catena.run/legal/master-agreement` (FR
-  default) once the website page lands.
+- `publishedUrl` is `https://catena.run/en/legal/master-agreement`.
 
 ## Bump
 

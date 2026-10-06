@@ -1,7 +1,7 @@
 # Master Services Agreement
 
 **Version pin:** see `legal/msa.json` in this package
-**Last reviewed:** 2026-05-07
+**Last reviewed:** 2026-10-06
 **Compliance baseline:** Loi 25 + CAI corporate-responsibility guide (Feb 2023)
 
 > Template. `[OPERATOR_LEGAL_NAME]`, `[CLIENT_LEGAL_NAME]`,
@@ -9,9 +9,9 @@
 > executed copy issued with the Order Form. The Subscription
 > composition (server + apps + optional support pack + installer)
 > is recorded on the Order Form, not in this template body. The
-> portal records the commit SHA in `legal/msa.json.version` against
-> the client's acceptance row so the binding text can be reconstructed
-> for any given client.
+> Operator records the commit SHA in `legal/msa.json.version` against
+> the Client's acceptance in its client records, so the binding text
+> can be reconstructed for any given client.
 
 ---
 
@@ -73,15 +73,17 @@ Subscription.
 
 3.3 **À-la-carte support.** Support beyond an active Support Pack, or
 support time used when no Support Pack is in effect, is billed at the
-published hourly rate (day / evening / night brackets) in 15-minute
-increments.
+published hourly rate in 15-minute increments. Support is provided
+during business hours as defined in Schedule A.
 
-3.4 **Payment processing.** Card processing is performed by Stripe.
-Card numbers do not transit Operator infrastructure.
+3.4 **Payment processing.** Payment is processed by Polar (polar.sh),
+the merchant of record for the Subscription, which holds the Client's
+payment details. Payment details do not transit Operator
+infrastructure.
 
 3.5 **Tax.** Fees are exclusive of applicable Quebec sales tax (TVQ),
 federal goods and services tax (TPS/GST), and any other applicable
-taxes, which the Operator will collect and remit as required by law.
+taxes, which Polar collects and remits as merchant of record.
 
 ### 4. Client responsibilities
 
@@ -92,9 +94,10 @@ billing relationships with those providers directly.
 
 4.2 The Client is the **responsable** under Loi 25 for the Personal
 Information stored within the Suite. The Operator acts as a
-**prestataire de services** processing Personal Information on the
-Client's behalf, on the conditions set out in the Data Processing
-Agreement at Schedule B.
+**prestataire de services** only when the Client grants it access to
+the Suite for a support request, and for the central audit log copy
+at section 6.3 when the Client subscribes to it, on the conditions set
+out in the Data Processing Agreement at Schedule B.
 
 4.3 The Client undertakes to comply with the Acceptable Use clause at
 section 7 below.
@@ -104,10 +107,11 @@ section 7 below.
 5.1 The Operator will configure the Suite in accordance with its
 published security baseline and Documentation.
 
-5.2 The Operator will hold confidential any credentials provided by
-the Client for the purpose of provisioning the Suite. Credentials are
-stored in encrypted form in the Operator's vault and are accessible
-only to authorized Operator personnel.
+5.2 The Client enters the credentials of its provider accounts in the
+Suite's administration panel, on its own server; the Operator holds
+none of them. Access the Client grants the Operator for a support
+request is used for that request only, and the Client may revoke it
+at any time.
 
 5.3 The Operator will notify the Client of any confidentiality
 incident affecting the Client's Personal Information in accordance
@@ -119,15 +123,21 @@ at Schedule E.
 6.1 All Personal Information and business data stored within the
 Suite remain the property of the Client at all times.
 
-6.2 The Operator will, at the Client's request and at any time during
-the term, provide a full data export drawn from the Operator's
-standard restore-payload format. The export procedure is documented
+6.2 The Suite's data and its encrypted backups stay on the server and
+in the object storage the Client owns, under a backup key generated on
+the Client's server and held by the Client. The Client may export them
+at any time without the Operator; the export procedure is documented
 at Schedule C.
 
-6.3 No Suite data is used for any purpose other than operating the
-Suite for the Client. The Operator does not analyze, sell, or share
-Client data with third parties, and does not train artificial
-intelligence models on Client data.
+6.3 The Operator holds the Client's contact information and no Suite
+data, with one exception: when the Client subscribes to the central
+audit log copy, the Operator receives a copy of the Suite's
+administrative audit entries (each administrative action, the email of
+the administrator who took it, and the address it came from), keeps it
+for ninety (90) days, and uses it only to produce the Client's
+attestation and to investigate incidents. The Operator does not
+analyze, sell, or share Client data with third parties, and does not
+train artificial intelligence models on Client data.
 
 ### 7. Acceptable use
 
@@ -166,10 +176,9 @@ days'** written notice.
 on a material breach by the other that is not cured within thirty
 (30) days of written notice.
 
-9.4 **Effects of termination.** On termination, the Operator will
-deliver a final data export per Schedule C and purge Client data
-from Operator-controlled systems within thirty (30) days, except
-for records required by law to be retained.
+9.4 **Effects of termination.** On termination, the Suite, its data
+and its backups stay on the accounts the Client owns. The Operator
+handles its own records about the Client per Schedule C.
 
 ### 10. Limitation of liability
 
@@ -230,14 +239,14 @@ constitutes acceptance.
 Notices to the Operator: at the email address set out on the
 Operator's contact page.
 
-Notices to the Client: at the email address on file in the portal
-account.
+Notices to the Client: at the email address on file in the Client's
+record with the Operator.
 
 ### 16. Acceptance
 
-The Client accepts this Agreement by ticking the acceptance checkbox
-on the portal Order page; the portal records the version of this
-Agreement and the timestamp of acceptance.
+The Client accepts this Agreement by signing the Order Form; the
+Operator records the version of this Agreement and the timestamp of
+acceptance in the Client's record.
 
 ---
 

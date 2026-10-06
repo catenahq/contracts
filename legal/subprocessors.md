@@ -1,7 +1,7 @@
 # Subprocessor list (Schedule D)
 
-**Version:** 1.0
-**Last reviewed:** 2026-05-07
+**Version:** 1.1
+**Last reviewed:** 2026-10-06
 
 > Schedule D to the [Master Services Agreement](master-agreement.md).
 > Listed under DPA section 4. Updates require thirty (30) days'
@@ -9,44 +9,29 @@
 
 ---
 
-## Default subprocessors
+## Scope
 
-The following subprocessors are engaged by default for every
-deployment. The Client may request a deployment that swaps any of
-them for a Client-selected alternative; the substitution is
-documented in the Order Form and may carry a tier or pricing
-adjustment.
+The Suite, its data and its backups run on providers the Client
+contracts directly: the VPS provider, the object storage, Cloudflare,
+the SMTP relay and the private network. They are the Client's own
+providers, chosen and billed by the Client, and not Operator
+subprocessors. The Operator processes Personal Information from the
+Suite only when the Client grants it access for a support request, and
+in the central audit log copy when the Client subscribes to it
+(Schedule B).
+
+## Operator subprocessors
+
+The following third parties process Personal Information on the
+Operator's behalf:
 
 | # | Subprocessor          | Purpose                                  | Region (default)             | Personal data accessed |
 |---|-----------------------|------------------------------------------|------------------------------|------------------------|
-| 1 | OVHcloud Canada       | VPS compute (root host of the Suite)     | Beauharnois (BHS), Quebec    | All Suite-resident data (encrypted at rest) |
-| 2 | OVHcloud Canada       | Hot S3 (object storage primary)          | Beauharnois (BHS), Quebec    | Suite media (Nextcloud primary storage when configured) |
-| 3 | eazybackup            | Cold-tier S3 (Restic backup destination) | ca-central-1 (Canada)        | Encrypted Restic snapshots only |
-| 4 | Cloudflare, Inc.      | Edge tunnel + DNS for Suite endpoints    | Global anycast               | TLS-terminated request metadata; payload encrypted in transit |
-| 5 | Tailscale Inc.        | Operator administrative tunnel           | Coordination plane: USA      | Operator-side device identity only; no Suite data |
-| 6 | Stripe Payments Canada Ltd. | Payment processing (cards, invoices) | Canada / United States       | Client billing contact, card payment data |
-| 7 | Resend, Inc. *or* Sendinblue (Brevo) SAS | Outbound transactional email (Operator side) | USA / EU | Operator-to-Client email metadata |
-| 8 | Anthropic / OVH       | Operator support tooling (LLM-assisted operations -- Operator-internal, no Client data shared) | Various | None (no Client PI sent) |
-
-The Operator's subprocessor list excludes upstream providers the
-Client selects directly (DIY tier rows) -- those are Client
-contractual relationships and not Operator subprocessors.
-
-## Per-deployment subprocessors
-
-Some deployments add a per-Suite subprocessor based on Client
-choices. These are listed in the Order Form and notified at signup:
-
-| Trigger                                  | Subprocessor       | Region        |
-|------------------------------------------|--------------------|---------------|
-| Client uses operator-managed SMTP relay  | Resend or Brevo    | USA / EU      |
-| Client opts into Cloudflare R2 cold-tier alternative | Cloudflare R2 | EU / NA |
-| Client opts into Backblaze B2 cold-tier alternative | Backblaze Inc. | USA |
-| Client opts into Hetzner Cloud VPS       | Hetzner Online GmbH | Germany       |
-
-A Client-selected non-Canadian region triggers an *évaluation des
-facteurs relatifs à la vie privée* (ÉFVP) under Loi 25 art. 70.1
-before provisioning; the assessment is recorded in the Order Form.
+| 1 | Polar (polar.sh)      | Merchant of record: payment processing, invoices, sales tax | Sweden (Stockholm) | Client billing contact, payment details |
+| 2 | OVHcloud              | Hosting of the Operator's servers: the CRM and helpdesk (ERPNext) and the central audit log copy | Canada (OVHcloud is based in France) | Client contact information, helpdesk tickets; administrator emails and source addresses in audit entries (subscribed Clients only) |
+| 3 | Resend, Inc.          | Outbound transactional email (Operator side) | USA | Operator-to-Client email metadata |
+| 4 | Sendinblue (Brevo) SAS | Outbound transactional email (Operator side) | EU | Operator-to-Client email metadata |
+| 5 | Anthropic             | Operator support tooling (LLM-assisted operations -- Operator-internal, no Client data shared) | Various | None (no Client PI sent) |
 
 ## Subprocessor due diligence
 
@@ -77,3 +62,4 @@ without separate notice.
 | Version | Date       | Change                                |
 |---------|------------|---------------------------------------|
 | 1.0     | 2026-05-07 | Initial publication.                  |
+| 1.1     | 2026-10-06 | Polar replaces Stripe as merchant of record; OVHcloud hosts the CRM, helpdesk and audit log copy; the Client's own providers are out of scope. |
