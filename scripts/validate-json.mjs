@@ -45,35 +45,14 @@ function requireKeys(file, obj, keys, where) {
   return true;
 }
 
-function requireBilingual(file, obj, where) {
-  for (const locale of ["en", "fr"]) {
-    if (!(locale in obj)) return fail(file, `${where} missing ${locale}`);
-  }
-  return true;
-}
-
 function validateTiersJson(file, data) {
-  const topLevelKeys = [
-    "currency",
-    "supportIncrementMinutes",
-    "alacarteHourlyCents",
-    "plan",
-  ];
+  const topLevelKeys = ["currency", "supportIncrementMinutes", "alacarteHourlyCents"];
   if (!requireKeys(file, data, topLevelKeys, "top-level")) return;
   if (data.currency !== "CAD") return fail(file, `currency must be "CAD", got: ${data.currency}`);
 
   // alacarteHourlyCents: the one business-hours rate
   if (typeof data.alacarteHourlyCents !== "number" || data.alacarteHourlyCents <= 0) {
     return fail(file, "alacarteHourlyCents must be a positive number");
-  }
-
-  // plan: the one flat retainer, priced per server
-  const plan = data.plan;
-  if (!requireKeys(file, plan, ["id", "displayName", "tagline", "monthlyPriceCents", "stripePriceId"], "plan")) return;
-  if (!requireBilingual(file, plan.displayName, "plan.displayName")) return;
-  if (!requireBilingual(file, plan.tagline, "plan.tagline")) return;
-  if (typeof plan.monthlyPriceCents !== "number" || plan.monthlyPriceCents <= 0) {
-    return fail(file, "plan.monthlyPriceCents must be a positive number");
   }
 
   ok(file);

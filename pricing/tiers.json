@@ -1,15 +1,5 @@
 {
   "currency": "CAD",
   "supportIncrementMinutes": 15,
-  "alacarteHourlyCents": 15000,
-  "plan": {
-    "id": "pro",
-    "displayName": { "en": "Catena Pro", "fr": "Catena Pro" },
-    "tagline": {
-      "en": "Flat monthly retainer per server. Unlimited apps, single sign-on, automatic updates with CVE remediation, daily offsite immutable backups, independent uptime monitoring, helpdesk. Hands-on work bills hourly.",
-      "fr": "Forfait mensuel fixe par serveur. Applications illimitées, authentification unique, mises à jour automatiques avec correction des CVE, sauvegardes quotidiennes hors site immuables, supervision de disponibilité indépendante, service d'assistance. Le travail manuel est facturé à l'heure."
-    },
-    "monthlyPriceCents": 10000,
-    "stripePriceId": null
-  }
+  "alacarteHourlyCents": 15000
 }

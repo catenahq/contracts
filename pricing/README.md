@@ -1,23 +1,15 @@
 # pricing/
 
-The paid offer, as one flat plan: Catena Pro, a monthly retainer per
-server with unlimited apps. Plus the two operator-wide knobs that are
-not part of the plan price -- the a-la-carte hourly rate, for support
-during business hours, and the billing increment it rounds to.
+The billing knobs that are not an edition price: the a-la-carte hourly
+rate, for support during business hours, and the billing increment it
+rounds to.
 
-Consumers:
+The edition prices (Catena Pro, Catena Business) live on their Polar
+products, where they are sold; catenahq/website reads them from Polar at
+build time (`src/lib/polar-prices.ts`). Community is free.
 
-- **catenahq/website**: `src/components/PricingMatrix.astro` imports
-  `pricing/tiers.json` and renders the Pro price cell from
-  `plan.monthlyPriceCents`. The capability cells around it come from
-  `ops/automation/audit/features.yml` through
-  `generate-pricing-matrix.py`; the two must not contradict each other,
-  and the matrix is what the offer SAYS.
-- **catenahq/ops**: `operator-tools/generate-sizing-doc.py` points
-  readers here in prose. It does not read the JSON.
-
-There is no other code consumer. A shape change here breaks the website
-build and nothing else.
+No code reads `tiers.json` today; `scripts/validate-json.mjs` checks its
+shape.
 
 ## Schema
 
@@ -27,35 +19,16 @@ build and nothing else.
 {
   "currency": "CAD",
   "supportIncrementMinutes": <int>,
-  "alacarteHourlyCents": <int, > 0>,
-  "plan": {
-    "id": "pro",
-    "displayName": { "en": "...", "fr": "..." },
-    "tagline":     { "en": "...", "fr": "..." },
-    "monthlyPriceCents": <int, > 0>,
-    "stripePriceId": "<Stripe price id>" | null
-  }
+  "alacarteHourlyCents": <int, > 0>
 }
 ```
 
-- One plan, one price. Community is free and Enterprise is bespoke, so
-  neither carries a number here; the website renders those two cells
-  from its own i18n strings.
-- The price is per server. Apps are unlimited and are never a line
-  item.
-- All prices are integer CAD cents. No floats, no currency string.
-- `stripePriceId` is `null` until the Stripe Product + Price exists.
-  Any biller must fail closed when it is null and the price is > 0.
-- `tagline` must stay consistent with the capability matrix. The matrix
-  is generated from `features.yml`, so it moves when the product moves;
-  this string does not, and is the likelier of the two to go stale.
+- All amounts are integer CAD cents. No floats.
 
 ## Bump
 
-- Price change (`monthlyPriceCents`, `alacarteHourlyCents`): cut a
+- Rate change (`alacarteHourlyCents`, `supportIncrementMinutes`): cut a
   **patch** release.
 - New optional top-level field: cut a **minor** release.
 - Shape change (renamed field, removed field): cut a **major** release
-  and land the website migration in the same push -- consumers build
-  against latest main, so a breaking change with no consumer migration
-  breaks the site.
+  and land the consumers' migration in the same push.
