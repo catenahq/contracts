@@ -37,7 +37,8 @@ every workflow uses for every cross-repo checkout: no workflow resolves
 a sibling's branch on its own. A `uses:` line is read before expressions
 are evaluated, so first-party actions and reusable workflows are named
 `@main`; that is the only branch name a workflow holds outside its
-`on:` triggers and run conditions.
+`on:` triggers and run conditions, unless it is a release channel listed
+in `BRANCH_ALLOW` (`scripts/check-repo-rules.mjs`).
 
 | Path | What it is |
 | --- | --- |

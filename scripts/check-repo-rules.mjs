@@ -73,6 +73,10 @@ const BRANCH_ALLOW = {
     [/^automation\/helpers\/digest_sources\.py$/,
       "the monthly digest reports what shipped, which is main"],
   ],
+  website: [
+    [/^\.github\/workflows\/deploy-pages\.yml$/,
+      "the daily price refresh starts on the default branch and rebuilds the released site, which is main"],
+  ],
 };
 
 const SKIP = /(^|\/)(package-lock\.json|[^/]*\.lock|LICEN[CS]E[^/]*)$|\.(png|jpe?g|gif|svg|ico|woff2?|otf|ttf|pdf|zip|gz)$/i;
