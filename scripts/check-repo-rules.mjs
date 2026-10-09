@@ -65,6 +65,10 @@ const BRANCH_RULES = [
 
 // Release channels: <repo> -> [path pattern, why].
 const BRANCH_ALLOW = {
+  "catena-ce": [
+    [/^\.github\/workflows\/publish-installer\.yml$/,
+      "the installer publishes only release tags on main"],
+  ],
   "catena-templates": [
     [/^(sources\/[^/]+\.json|catalog\.json|templates\.json)$/,
       "catalog descriptions link the blueprint READMEs on main, the channel hosts read"],
@@ -72,6 +76,8 @@ const BRANCH_ALLOW = {
   ops: [
     [/^automation\/helpers\/digest_sources\.py$/,
       "the monthly digest reports what shipped, which is main"],
+    [/^create-catena-release\.sh$/,
+      "the release merges dev into main, tags main and fast-forwards dev onto it"],
   ],
   website: [
     [/^\.github\/workflows\/deploy-pages\.yml$/,
