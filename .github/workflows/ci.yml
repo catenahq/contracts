@@ -35,6 +35,8 @@ jobs:
         run: node brand/test.js
       - name: Validate JSON artifacts
         run: node scripts/validate-json.mjs
+      - name: Script tests (comment parsers, the gates on a deleted tracked file)
+        run: node scripts/lib/yaml-comments.test.mjs && node scripts/lib/shell-comments.test.mjs && node scripts/gates.test.mjs
 
   duplication:
     # Copy-paste ratchet: .jscpd.json carries the baseline threshold;

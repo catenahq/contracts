@@ -142,10 +142,11 @@ function readDebt() {
   return entries;
 }
 
-const tracked = execSync("git ls-files", { encoding: "utf-8" })
-  .trim()
-  .split("\n")
-  .filter(Boolean);
+// A tracked path the working tree has deleted is out of scope, as it is once
+// the deletion is committed.
+const tracked = execSync("git ls-files -z", { encoding: "utf-8" })
+  .split("\0")
+  .filter((f) => f && existsSync(f));
 
 const extOf = (f) => {
   const dot = f.lastIndexOf(".");
