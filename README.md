@@ -34,7 +34,8 @@ npm symlinks `node_modules/@catenahq/contracts` to the sibling
 checkout, so an edit here is visible on the consumer's next dev/build.
 CI mirrors the layout: each consumer's workflow checks this repo out
 alongside itself with `.github/actions/checkout-sibling`, at the branch
-the consumer runs on when this repo has it, else at the default branch.
+the consumer runs on when this repo has it and a bot did not name it,
+else at the default branch.
 The scripts under `scripts/` (unicode, prose and repo-rule gates, and
 the brand-asset sync each site runs on install) run from that checkout
 the same way.

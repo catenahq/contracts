@@ -1,8 +1,8 @@
 name: checkout-sibling
 description: >-
   Check out a sibling catenahq repo at the branch this run is on. The sibling's
-  branch of the same name when it has one; on a pull request, then the base
-  branch; else the sibling's default branch.
+  branch of the same name when it has one and a bot did not name it; on a pull
+  request, then the base branch; else the sibling's default branch.
 
 inputs:
   repository:
@@ -65,6 +65,9 @@ runs:
         ref=""
         for c in "${candidates[@]}"; do
           [ -n "$c" ] || continue
+          # Renovate, engine-bump and scanctl name branches per repo, so a
+          # sibling's branch of the same name holds an unrelated change.
+          case "$c" in renovate/* | engine-bump/* | scanctl/*) continue ;; esac
           found="$(git ls-remote --heads "https://github.com/$REPOSITORY.git" "refs/heads/$c")"
           if [ -n "$found" ]; then
             ref="$c"
