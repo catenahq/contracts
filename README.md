@@ -36,9 +36,11 @@ CI mirrors the layout: each consumer's workflow checks this repo out
 alongside itself with `.github/actions/checkout-sibling`, at the branch
 the consumer runs on when this repo has it and a bot did not name it,
 else at the default branch.
-The scripts under `scripts/` (unicode, prose and repo-rule gates, and
-the brand-asset sync each site runs on install) run from that checkout
-the same way.
+The scripts under `scripts/` (unicode, prose, repo-rule and core-app-name
+gates, and the brand-asset sync each site runs on install) run from that
+checkout the same way. The core-app-name gate takes the roots to scan as
+arguments (catena-ce `ansible/`; catena-admin `payload/ shell/`) and keeps
+its debt in the consumer's `.github/core-app-names-debt.json`.
 
 Direct file imports:
 
@@ -63,6 +65,8 @@ CSS:
 
 1. Update the artifact (e.g. `pricing/tiers.json`) and run this repo's
    gates: `npm test`, `npm run check:unicode`, `npm run check:prose`.
+   A change to `core-app-names.json` moves the consumers' app-name debt:
+   run their `check-core-app-names.mjs --update` after it.
 2. Run each consumer's own gates against the change: they read this
    checkout, so the change reaches them on their next build.
 3. Put a change that consumers must follow on a branch of the same name

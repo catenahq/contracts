@@ -27,6 +27,7 @@ from there.
     node ../contracts/scripts/check-unicode.mjs     # unicode + banned words
     node ../contracts/scripts/check-prose.mjs       # comment prose
     node ../contracts/scripts/check-repo-rules.mjs  # repo rules (env files, branch names)
+    node ../contracts/scripts/check-core-app-names.mjs <root>...  # no app names in core code
 
 The node scripts take the CURRENT DIRECTORY as their scope, because they
 enumerate with `git ls-files`. That is how the ops sales job scopes
@@ -45,6 +46,8 @@ in `BRANCH_ALLOW` (`scripts/check-repo-rules.mjs`).
 | `scripts/check-unicode.mjs` | No em dashes, smart quotes or decorative Unicode, in any tracked file. Plus the banned-word scan. |
 | `scripts/check-prose.mjs` | Runs Vale over code comments. Batches, because Vale leaks a tree-sitter query per file and dies on a large tree. |
 | `scripts/check-repo-rules.mjs` | Rules every repo keeps: the root `.gitignore` carries the env-file rule and no real env file is tracked; no workflow or script names a branch where something is checked out, installed or compared, and no catenahq link names one. |
+| `scripts/check-core-app-names.mjs` | Counts the app names of `core-app-names.json` (whole words, any case) per file under the roots it is given, and compares with the consumer's `core-app-names-debt.json` (path -> count). A rise or a new path fails; a fall fails until `--update` lowers the debt. `--update` refuses a rise. |
+| `core-app-names.json` | `apps`: the names the gate finds. `structural`: the services core may name; no name is in both. |
 | `.github/actions/checkout-sibling/` | Checks out a sibling repo at the branch the run is on (same name unless a bot named it, else a pull request's base, else the default branch). |
 | `scripts/sync-brand-assets.mjs` | Copies the logo into the consuming site's `public/favicon.svg`. Each site's `postinstall`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
@@ -59,8 +62,9 @@ see the blast radius, and expect debt files to move. **Never use a Vale
 concatenate rather than alternate, so a multi-entry `raw` rule matches
 nothing and reports nothing.
 
-Each consumer owns two files and nothing else: `banned-words-debt.txt`
-and `prose-debt.txt`, one `path -- reason` per line. A listed file that
+Each consumer owns three files and nothing else: `banned-words-debt.txt`
+and `prose-debt.txt`, one `path -- reason` per line, and
+`core-app-names-debt.json` for the app-name gate (only repos that run it). A listed file that
 is already clean FAILS the gate, so a drained entry has to be deleted.
 
 Both scripts look for them in `.ci/`, then `.github/`, then the top of

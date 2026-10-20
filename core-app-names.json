@@ -1,0 +1,40 @@
+{
+  "apps": [
+    "actualbudget",
+    "chatwoot",
+    "clamav",
+    "collabora",
+    "coturn",
+    "docuseal",
+    "easyappointments",
+    "erpnext",
+    "espocrm",
+    "immich",
+    "invoiceninja",
+    "jitsi",
+    "kimai",
+    "mailserver",
+    "mautic",
+    "n8n",
+    "nextcloud",
+    "onlyoffice",
+    "postiz",
+    "rocketchat",
+    "roundcube",
+    "windshift",
+    "wordpress",
+    "zammad"
+  ],
+  "structural": [
+    "beszel",
+    "catena-admin",
+    "cloudflared",
+    "gatus",
+    "healthchecks",
+    "keycloak",
+    "oauth2-proxy",
+    "portainer",
+    "postgres",
+    "traefik"
+  ]
+}
