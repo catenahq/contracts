@@ -5,6 +5,11 @@ name: CI
 #   - brand/test.js smoke test passes
 #   - JSON files match their documented shape (basic key presence
 #     + types; full schema validation is a follow-up)
+#
+# A push to a branch keeps the absolute gate. A pull request is judged on what
+# it introduces: the validation steps and the duplication ratchet run through
+# this repo's new-failures-only action, which fails only on failures the base
+# commit does not have.
 
 on:
   # Every pushed branch. Renovate and engine-bump branches always carry a pull
@@ -28,15 +33,31 @@ jobs:
         with:
           node-version: "24"
       - name: Unicode hygiene (no em dashes / smart quotes / decorative symbols)
-        run: node scripts/check-unicode.mjs
-      - name: Repo rules (no tracked env file; .gitignore carries the env rule)
-        run: node scripts/check-repo-rules.mjs
-      - name: Run brand smoke test
-        run: node brand/test.js
-      - name: Validate JSON artifacts
-        run: node scripts/validate-json.mjs
-      - name: Script tests (comment parsers, the gates on a deleted tracked file)
-        run: node scripts/lib/yaml-comments.test.mjs && node scripts/lib/shell-comments.test.mjs && node scripts/gates.test.mjs && node scripts/new-failures-only.test.mjs
+        # A finding is its file, its kind and its line's text: the sed drops
+        # the line number, so a moved line is not a new finding.
+        uses: catenahq/contracts/.github/actions/new-failures-only@main
+        with:
+          working-directory: ${{ github.workspace }}
+          repo-path: ${{ github.workspace }}
+          failure-lines: '^  [^ :]+: .*'
+          run: |
+            node scripts/check-unicode.mjs 2>&1 \
+              | sed -E '/^  [^ :]+:[0-9]+: /{N;s/^(  [^ :]+):[0-9]+: ([^\n]*)\n +(.*)$/\1: \2 | \3/}'
+      - name: Repo rules, brand smoke test, JSON artifacts and script tests
+        # Script tests: comment parsers, the gates on a deleted tracked file,
+        # the new-failures-only script.
+        uses: catenahq/contracts/.github/actions/new-failures-only@main
+        with:
+          working-directory: ${{ github.workspace }}
+          repo-path: ${{ github.workspace }}
+          run: |
+            node scripts/check-repo-rules.mjs
+            node brand/test.js
+            node scripts/validate-json.mjs
+            node scripts/lib/yaml-comments.test.mjs
+            node scripts/lib/shell-comments.test.mjs
+            node scripts/gates.test.mjs
+            node scripts/new-failures-only.test.mjs
 
   duplication:
     # Copy-paste ratchet: .jscpd.json carries the baseline threshold;
@@ -52,4 +73,8 @@ jobs:
         with:
           node-version: "24"
       - name: jscpd (threshold in .jscpd.json)
-        run: npx --yes jscpd@4 --silent
+        uses: catenahq/contracts/.github/actions/new-failures-only@main
+        with:
+          working-directory: ${{ github.workspace }}
+          repo-path: ${{ github.workspace }}
+          run: npx --yes jscpd@4 --silent
