@@ -1,0 +1,37 @@
+name: new-failures-only
+description: >-
+  Run a gate command. A push keeps the absolute gate; a pull request fails only
+  on failures its base commit does not have.
+
+inputs:
+  run:
+    description: The gate command, run with bash -eo pipefail.
+    required: true
+  working-directory:
+    description: Where the command runs.
+    default: '.'
+  repo-path:
+    description: The checkout that moves to the base commit for the comparison run.
+    required: true
+  failure-lines:
+    description: >-
+      Extended regex. Each matched part of an output line is one failure's
+      identity. Empty: the exit status alone (a failing base passes the pull
+      request).
+    default: ''
+  token:
+    description: Token that fetches the base commit.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NFO_RUN: ${{ inputs.run }}
+        NFO_WORKDIR: ${{ inputs.working-directory }}
+        NFO_REPO_PATH: ${{ inputs.repo-path }}
+        NFO_FAILURE_LINES: ${{ inputs.failure-lines }}
+        NFO_TOKEN: ${{ inputs.token }}
+        NFO_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: bash "$GITHUB_ACTION_PATH/new-failures-only.sh"

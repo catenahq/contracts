@@ -49,6 +49,7 @@ in `BRANCH_ALLOW` (`scripts/check-repo-rules.mjs`).
 | `scripts/check-core-app-names.mjs` | Counts the app names of `core-app-names.json` (whole words, any case) per file under the roots it is given, and compares with the consumer's `core-app-names-debt.json` (path -> count). A rise or a new path fails; a fall fails until `--update` lowers the debt. `--update` refuses a rise. |
 | `core-app-names.json` | `apps`: the names the gate finds. `structural`: the services core may name; no name is in both. |
 | `.github/actions/checkout-sibling/` | Checks out a sibling repo at the branch the run is on (same name unless a bot named it, else a pull request's base, else the default branch). |
+| `.github/actions/new-failures-only/` | Runs a gate command: a push keeps the absolute gate, a pull request fails only on failure lines its base commit lacks (README.md, "Pull requests fail only on new failures"). |
 | `scripts/sync-brand-assets.mjs` | Copies the logo into the consuming site's `public/favicon.svg`. Each site's `postinstall`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
 | `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |

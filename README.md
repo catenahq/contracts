@@ -61,6 +61,40 @@ CSS:
 @import "@catenahq/contracts/brand/tokens/all.css";
 ```
 
+## Pull requests fail only on new failures
+
+`.github/actions/new-failures-only` runs a gate command so that a pull
+request is judged on what it introduces. A push (any event but
+`pull_request`) runs the command and takes its exit status: the absolute
+gate. On a pull request the command runs at the head and passes if it
+passes. If it fails, the action fetches the base commit (depth 1), checks it
+out detached in `repo-path`, runs the command again, and checks the head
+back out. The job then fails only when the head output has a failure line the
+base output lacks. New lines print as `::error::`, lines the base carries as
+`::warning::`, and a summary line gives the counts. Untracked files in
+`repo-path` are removed before each checkout; nested repositories (sibling
+checkouts) and ignored files stay.
+
+| Input | Meaning |
+| --- | --- |
+| `run` | Required. The gate command (multi-line allowed), run with `bash -eo pipefail`; output is shown live. |
+| `working-directory` | Where `run` runs. Default `.`. |
+| `repo-path` | Required. The checkout that moves to the base commit. |
+| `failure-lines` | Extended regex. Each matched part of an output line is one failure's identity, so a regex that stops before a timing or a line number keeps identities stable between runs. Empty (or no match in the head output): the exit status alone, and a failing base passes the pull request. |
+| `token` | Fetches the base commit (default `github.token`; sent as an http extraheader on that one fetch). |
+
+```yaml
+      - uses: catenahq/contracts/.github/actions/new-failures-only@main
+        with:
+          working-directory: catena-admin
+          repo-path: catena-admin
+          failure-lines: '^--- FAIL: [^ ]+|^FAIL[[:space:]]+[^[:space:]]+'
+          run: go test ./...
+```
+
+`scripts/new-failures-only.test.mjs` drives the action's script
+(`new-failures-only.sh`) over a scratch repository.
+
 ## How to change a contract
 
 1. Update the artifact (e.g. `pricing/tiers.json`) and run this repo's
