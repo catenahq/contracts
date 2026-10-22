@@ -28,7 +28,7 @@ try {
   git("init", "-q");
   mkdirSync(join(work, ".github"));
   put("core/a.yml", "image: nextcloud\nname: Nextcloud\n");
-  put("core/b.yml", "image: traefik\nkeycloak postgres catena-admin cloudflared oauth2-proxy gatus healthchecks beszel portainer\n");
+  put("core/b.yml", "image: traefik\nkeycloak postgres catena-admin cloudflared oauth2-proxy gatus healthchecks beszel\n");
   put("outside/c.yml", "nextcloud\n");
 
   // A repo with no debt file is seeded by --update; paths outside the roots stay out.
@@ -84,6 +84,15 @@ try {
   r = run("core");
   assert.ok(r.out.includes("core/w.txt: 5 (debt 0)"), r.out);
   put("core/w.txt", "mynextcloud nextcloudy\n");
+  r = run("core");
+  assert.equal(r.status, 0, r.out);
+
+  // The spellings an app goes by besides its name count, each as a whole word;
+  // portainer is an app.
+  put("core/s.txt", "Rocket.Chat talk-hpb catena-nextcloud_talk-hpb JVB occ clamd clamdscan rspamd Synapse Portainer\n");
+  r = run("core");
+  assert.ok(r.out.includes("core/s.txt: 11 (debt 0)"), r.out);
+  put("core/s.txt", "occupied rocketxchat jvbs preoccupied unsynapse portainers mail server\n");
   r = run("core");
   assert.equal(r.status, 0, r.out);
 
