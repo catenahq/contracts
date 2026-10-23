@@ -58,6 +58,7 @@ jobs:
             node scripts/lib/shell-comments.test.mjs
             node scripts/gates.test.mjs
             node scripts/new-failures-only.test.mjs
+            node scripts/check-core-app-names.test.mjs
 
   duplication:
     # Copy-paste ratchet: .jscpd.json carries the baseline threshold;

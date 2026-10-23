@@ -39,8 +39,9 @@ else at the default branch.
 The scripts under `scripts/` (unicode, prose, repo-rule and core-app-name
 gates, and the brand-asset sync each site runs on install) run from that
 checkout the same way. The core-app-name gate takes the roots to scan as
-arguments (catena-ce `ansible/`; catena-admin `payload/ shell/`) and keeps
-its debt in the consumer's `.github/core-app-names-debt.json`.
+arguments (catena-ce `.`; catena-admin `--exclude central/ .`) and keeps
+its debt in the consumer's `.github/core-app-names-debt.json` and its
+accepted uses in `.github/core-app-names-exceptions.json`.
 
 Direct file imports:
 
@@ -100,7 +101,8 @@ checkouts) and ignored files stay.
 1. Update the artifact (e.g. `pricing/tiers.json`) and run this repo's
    gates: `npm test`, `npm run check:unicode`, `npm run check:prose`.
    A change to `core-app-names.json` moves the consumers' app-name debt:
-   run their `check-core-app-names.mjs --update` after it.
+   run their `check-core-app-names.mjs --update` after it, then add by
+   hand each new name an accepted file holds.
 2. Run each consumer's own gates against the change: they read this
    checkout, so the change reaches them on their next build.
 3. Put a change that consumers must follow on a branch of the same name
