@@ -78,6 +78,8 @@ const BRANCH_ALLOW = {
       "the monthly digest reports what shipped, which is main"],
     [/^create-catena-release\.sh$/,
       "the release merges dev into main, tags main and fast-forwards dev onto it"],
+    [/^automation\/operator-tools\/release_gate\.py$/,
+      "the release gate proves the dev heads a release is made from"],
   ],
   website: [
     [/^\.github\/workflows\/deploy-pages\.yml$/,
