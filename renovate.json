@@ -15,11 +15,6 @@
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "npm runtime (minor+patch)",
       "automerge": true
-    },
-    {
-      "matchManagers": ["npm"],
-      "matchUpdateTypes": ["major"],
-      "automerge": false
     }
   ],
   "ignorePaths": ["**/node_modules/**"]
