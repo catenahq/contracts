@@ -67,6 +67,59 @@ function run({ repo, base }, withBase, failureLines = LINES) {
   return { status: result.status, out: result.stdout + result.stderr };
 }
 
+// A pull request as GitHub checks it out: `stale` is the base branch when the
+// pull request was opened, `main` the base branch since, `pr` the pull
+// request's own commit, and the merge commit has main then pr as parents.
+// Returns the repo, a 1-deep clone left at the merge commit, and the shas.
+function mergeFixture(name, stale, main, pr) {
+  const repo = join(work, name);
+  execFileSync("git", ["init", "-q", "-b", "main", repo]);
+  const git = (cwd, ...args) =>
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
+      cwd,
+      encoding: "utf-8",
+    }).trim();
+  const put = (failures) => writeFileSync(join(repo, "failures.txt"), failures);
+  put(stale);
+  git(repo, "add", "-A");
+  git(repo, "commit", "-q", "-m", "stale base");
+  const staleSha = git(repo, "rev-parse", "HEAD");
+  git(repo, "checkout", "-q", "-b", "pr");
+  put(pr);
+  git(repo, "commit", "-q", "-am", "pr");
+  const prSha = git(repo, "rev-parse", "HEAD");
+  git(repo, "checkout", "-q", "main");
+  put(main);
+  git(repo, "commit", "-q", "-am", "main moved");
+  const mainSha = git(repo, "rev-parse", "HEAD");
+  git(repo, "checkout", "-q", "pr");
+  const merge = git(repo, "commit-tree", "HEAD^{tree}", "-p", mainSha, "-p", prSha, "-m", "merge");
+  git(repo, "branch", "merge", merge);
+  const clone = join(work, `${name}-clone`);
+  execFileSync("git", ["clone", "-q", "--depth", "1", "--branch", "merge", `file://${repo}`, clone]);
+  return { repo, clone, staleSha, mainSha, prSha, merge };
+}
+
+// Runs the script in `cwd` with exactly the given NFO_* and GITHUB_SHA values.
+function runIn(cwd, remote, extra, failureLines = LINES) {
+  const result = spawnSync("bash", [SCRIPT], {
+    cwd,
+    encoding: "utf-8",
+    env: {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      RUNNER_TEMP: work,
+      NFO_RUN: GATE,
+      NFO_WORKDIR: ".",
+      NFO_REPO_PATH: ".",
+      NFO_FAILURE_LINES: failureLines,
+      NFO_REMOTE: `file://${remote}`,
+      ...extra,
+    },
+  });
+  return { status: result.status, out: result.stdout + result.stderr };
+}
+
 function expect(label, got, status, fragments) {
   assert.equal(got.status, status, `${label}: exit ${got.status}\n${got.out}`);
   for (const f of fragments) assert.ok(got.out.includes(f), `${label}: missing "${f}" in\n${got.out}`);
@@ -129,6 +182,31 @@ try {
   ]);
   fx = fixture("push-base-same", "FAIL one\n", "FAIL one\n");
   expect("push-base-same", run(fx, true), 0, ["0 new, 1 carried from the base"]);
+
+  // On a pull request the merge commit's first parent is the base, in a full
+  // repo and in a 1-deep clone; the event's stale base.sha is ignored. Judged
+  // from the stale commit (no failures) FAIL one would be new.
+  const mx = mergeFixture("merge", "", "FAIL one\n", "FAIL one\n");
+  for (const [label, cwd] of [["merge-full", mx.repo], ["merge-shallow", mx.clone]]) {
+    if (cwd === mx.repo) execFileSync("git", ["checkout", "-q", "--detach", mx.merge], { cwd });
+    got = runIn(cwd, mx.repo, { GITHUB_SHA: mx.merge, NFO_EVENT_BASE_SHA: mx.staleSha });
+    expect(label, got, 0, [`running it at the base commit ${mx.mainSha}`, "0 new, 1 carried from the base"]);
+    assert.ok(!got.out.includes(mx.staleSha), `${label}: used the stale event base\n${got.out}`);
+  }
+  assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: mx.clone, encoding: "utf-8" }).trim(), mx.merge);
+
+  // A checkout of the pull request's head commit judges from the event's base.
+  got = runIn(mx.repo, mx.repo, { GITHUB_SHA: mx.prSha, NFO_EVENT_BASE_SHA: mx.staleSha });
+  expect("not-merge", got, 1, [`running it at the base commit ${mx.staleSha}`, "::error::new failure: FAIL one"]);
+
+  // An explicit base wins over the merge commit's parent and the event's base.
+  got = runIn(mx.clone, mx.repo, { GITHUB_SHA: mx.merge, NFO_BASE_SHA: mx.staleSha, NFO_EVENT_BASE_SHA: mx.mainSha });
+  expect("explicit", got, 1, [`running it at the base commit ${mx.staleSha}`, "::error::new failure: FAIL one"]);
+
+  // Another event with no base keeps the absolute gate, even on a merge commit.
+  got = runIn(mx.clone, mx.repo, { GITHUB_SHA: mx.merge });
+  expect("absolute", got, 1, ["FAIL one"]);
+  assert.ok(!got.out.includes("base commit"), got.out);
 
   // An unreachable base fails the job.
   fx = fixture("no-base", "FAIL one\n", "FAIL one\n");

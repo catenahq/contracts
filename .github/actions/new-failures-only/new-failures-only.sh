@@ -9,8 +9,15 @@
 #   NFO_FAILURE_LINES  extended regex; each matched part of an output line is
 #                      one failure's identity. Empty: the exit status alone.
 #   NFO_TOKEN          token for the base fetch
-#   NFO_BASE_SHA       commit the change is judged from; empty: absolute gate
-#   NFO_REMOTE         where the base commit is fetched from
+#   NFO_BASE_SHA       commit the change is judged from; wins when set
+#   NFO_EVENT_BASE_SHA a pull request's base commit as the event holds it (it
+#                      can be an old commit of the base branch); used only when
+#                      the checkout is not GitHub's merge commit
+#   GITHUB_SHA         the merge commit of a pull request; when HEAD of the
+#                      checkout is it and it has two parents, its first parent
+#                      is the base
+#   With none of these the gate is absolute.
+#   NFO_REMOTE        where the base commit is fetched from
 #                      (default https://github.com/$GITHUB_REPOSITORY.git)
 set -uo pipefail
 export LC_ALL=C
@@ -40,14 +47,30 @@ annotate() {
   echo "::$level::$text"
 }
 
+# The first parent of the merge commit checked out at $REPO, read from the raw
+# commit object so a 1-deep clone works; empty when HEAD is not that commit.
+merge_first_parent() {
+  local head parents
+  head="$(git -C "$REPO" rev-parse HEAD 2>/dev/null)" || return 0
+  [ -n "${GITHUB_SHA:-}" ] && [ "$head" = "$GITHUB_SHA" ] || return 0
+  parents="$(git -C "$REPO" cat-file commit HEAD | sed -n '/^$/q;s/^parent //p')"
+  [ "$(printf '%s\n' "$parents" | wc -l)" -eq 2 ] && printf '%s\n' "$parents" | head -n 1
+  return 0
+}
+
+base_sha="${NFO_BASE_SHA:-}"
+if [ -z "$base_sha" ] && [ -n "${NFO_EVENT_BASE_SHA:-}" ]; then
+  base_sha="$(merge_first_parent)"
+  base_sha="${base_sha:-$NFO_EVENT_BASE_SHA}"
+fi
+
 run_gate "$logs/head.log"
 head_status=$?
 
-if [ -z "${NFO_BASE_SHA:-}" ] || [ "$head_status" -eq 0 ]; then
+if [ -z "$base_sha" ] || [ "$head_status" -eq 0 ]; then
   exit "$head_status"
 fi
 
-base_sha="$NFO_BASE_SHA"
 head_sha="$(git -C "$REPO" rev-parse HEAD)"
 remote="${NFO_REMOTE:-https://github.com/${GITHUB_REPOSITORY:-}.git}"
 
