@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs a gate command. A pull request fails only on failures its base commit
-# does not have; any other event keeps the absolute gate.
+# Runs a gate command. With a base commit, it fails only on failures that base
+# does not have; without one it keeps the absolute gate.
 #
 # Input (environment):
 #   NFO_RUN            gate command (bash -eo pipefail)
@@ -9,10 +9,9 @@
 #   NFO_FAILURE_LINES  extended regex; each matched part of an output line is
 #                      one failure's identity. Empty: the exit status alone.
 #   NFO_TOKEN          token for the base fetch
-#   NFO_BASE_SHA       pull request base commit
+#   NFO_BASE_SHA       commit the change is judged from; empty: absolute gate
 #   NFO_REMOTE         where the base commit is fetched from
 #                      (default https://github.com/$GITHUB_REPOSITORY.git)
-#   GITHUB_EVENT_NAME  "pull_request" selects the comparison
 set -uo pipefail
 export LC_ALL=C
 
@@ -44,11 +43,11 @@ annotate() {
 run_gate "$logs/head.log"
 head_status=$?
 
-if [ "${GITHUB_EVENT_NAME:-}" != pull_request ] || [ "$head_status" -eq 0 ]; then
+if [ -z "${NFO_BASE_SHA:-}" ] || [ "$head_status" -eq 0 ]; then
   exit "$head_status"
 fi
 
-base_sha="${NFO_BASE_SHA:?NFO_BASE_SHA is required on a pull request}"
+base_sha="$NFO_BASE_SHA"
 head_sha="$(git -C "$REPO" rev-parse HEAD)"
 remote="${NFO_REMOTE:-https://github.com/${GITHUB_REPOSITORY:-}.git}"
 

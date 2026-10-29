@@ -62,13 +62,14 @@ CSS:
 @import "@catenahq/contracts/brand/tokens/all.css";
 ```
 
-## Pull requests fail only on new failures
+## Changes fail only on new failures
 
-`.github/actions/new-failures-only` runs a gate command so that a pull
-request is judged on what it introduces. A push (any event but
-`pull_request`) runs the command and takes its exit status: the absolute
-gate. On a pull request the command runs at the head and passes if it
-passes. If it fails, the action fetches the base commit (depth 1), checks it
+`.github/actions/new-failures-only` runs a gate command so that a change is
+judged on what it introduces. The base commit is the `base` input, else a
+pull request's base. With none (a push without `base`) the command runs and
+its exit status is the verdict: the absolute gate. With a base the command
+runs at the head and passes if it passes. If it fails, the action fetches the
+base commit (depth 1), checks it
 out detached in `repo-path`, runs the command again, and checks the head
 back out. The job then fails only when the head output has a failure line the
 base output lacks. New lines print as `::error::`, lines the base carries as
@@ -82,6 +83,7 @@ checkouts) and ignored files stay.
 | `working-directory` | Where `run` runs. Default `.`. |
 | `repo-path` | Required. The checkout that moves to the base commit. |
 | `failure-lines` | Extended regex. Each matched part of an output line is one failure's identity, so a regex that stops before a timing or a line number keeps identities stable between runs. Empty (or no match in the head output): the exit status alone, and a failing base passes the pull request. |
+| `base` | The commit the change is judged from. Empty: a pull request's base commit; any other event keeps the absolute gate. |
 | `token` | Fetches the base commit (default `github.token`; sent as an http extraheader on that one fetch). |
 
 ```yaml

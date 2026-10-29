@@ -1,7 +1,8 @@
 name: new-failures-only
 description: >-
-  Run a gate command. A push keeps the absolute gate; a pull request fails only
-  on failures its base commit does not have.
+  Run a gate command. With a base commit (a pull request's, or the base input)
+  it fails only on failures that commit does not have; otherwise it keeps the
+  absolute gate.
 
 inputs:
   run:
@@ -19,6 +20,11 @@ inputs:
       identity. Empty: the exit status alone (a failing base passes the pull
       request).
     default: ''
+  base:
+    description: >-
+      The commit the change is judged from. Empty: a pull request's base
+      commit; any other event keeps the absolute gate.
+    default: ''
   token:
     description: Token that fetches the base commit.
     default: ${{ github.token }}
@@ -33,5 +39,5 @@ runs:
         NFO_REPO_PATH: ${{ inputs.repo-path }}
         NFO_FAILURE_LINES: ${{ inputs.failure-lines }}
         NFO_TOKEN: ${{ inputs.token }}
-        NFO_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        NFO_BASE_SHA: ${{ inputs.base || (github.event_name == 'pull_request' && github.event.pull_request.base.sha) || '' }}
       run: bash "$GITHUB_ACTION_PATH/new-failures-only.sh"
