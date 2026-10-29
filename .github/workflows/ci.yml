@@ -37,7 +37,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version: "26"
       - name: Unicode hygiene (no em dashes / smart quotes / decorative symbols)
         # A finding is its file, its kind and its line's text: the sed drops
         # the line number, so a moved line is not a new finding.
@@ -78,7 +78,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version: "26"
       - name: jscpd (threshold in .jscpd.json)
         uses: catenahq/contracts/.github/actions/new-failures-only@main
         with:
