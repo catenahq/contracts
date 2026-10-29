@@ -43,8 +43,8 @@ in `BRANCH_ALLOW` (`scripts/check-repo-rules.mjs`).
 
 | Path | What it is |
 | --- | --- |
-| `scripts/check-unicode.mjs` | No em dashes, smart quotes or decorative Unicode, in any tracked file. Plus the banned-word scan. |
-| `scripts/check-prose.mjs` | Runs Vale over code comments. Batches, because Vale leaks a tree-sitter query per file and dies on a large tree. |
+| `scripts/check-unicode.mjs` | No em dashes, smart quotes or decorative Unicode, in any tracked file outside a `vendor/` folder (third-party copies). Plus the banned-word scan. |
+| `scripts/check-prose.mjs` | Runs Vale over code comments, skipping `vendor/` folders. Batches, because Vale leaks a tree-sitter query per file and dies on a large tree. |
 | `scripts/check-repo-rules.mjs` | Rules every repo keeps: the root `.gitignore` carries the env-file rule and no real env file is tracked; no workflow or script names a branch where something is checked out, installed or compared, and no catenahq link names one. |
 | `scripts/check-core-app-names.mjs` | Counts the app names of `core-app-names.json` (whole words, any case) per file under the roots it is given, and compares with the consumer's `core-app-names-debt.json` (path -> count). A rise or a new path fails; a fall fails until `--update` lowers the debt. `--update` refuses a rise. The consumer's `core-app-names-exceptions.json` lists accepted uses (path -> names, reason); a stale entry fails and `--update` drops it, but never adds one. A `bench:` gate pointer is not counted. A root of `.` scans the repository; `--exclude <path>` drops a prefix. |
 | `core-app-names.json` | `apps`: the names the gate finds. `structural`: the services core may name; no name is in both. |

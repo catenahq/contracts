@@ -119,7 +119,6 @@ const debt = readDebt();
 const debtHit = new Set();
 
 const SKIP_DIR_PATTERNS = [
-  /^vendor\//,
   /^dist\//,
   /^\.next\//,
   /^\.astro\//,
@@ -156,10 +155,11 @@ const SKIP_EXTENSIONS = new Set([
 ]);
 
 // A tracked path the working tree has deleted is out of scope, as it is once
-// the deletion is committed.
+// the deletion is committed. A path with a vendor/ segment is third-party
+// text the repo does not write, so it is out of scope.
 const files = execSync("git ls-files -z", { encoding: "utf-8" })
   .split("\0")
-  .filter((f) => f && existsSync(f));
+  .filter((f) => f && existsSync(f) && !/(^|\/)vendor\//.test(f));
 
 const findings = [];
 

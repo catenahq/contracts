@@ -144,9 +144,10 @@ function readDebt() {
 
 // A tracked path the working tree has deleted is out of scope, as it is once
 // the deletion is committed.
+// A path with a vendor/ segment is third-party text the repo does not write.
 const tracked = execSync("git ls-files -z", { encoding: "utf-8" })
   .split("\0")
-  .filter((f) => f && existsSync(f));
+  .filter((f) => f && existsSync(f) && !/(^|\/)vendor\//.test(f));
 
 const extOf = (f) => {
   const dot = f.lastIndexOf(".");

@@ -19,6 +19,8 @@ import { fileURLToPath } from "node:url";
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 const PINNED = readFileSync(join(SCRIPTS, "..", ".vale-version"), "utf-8").trim();
 
+const DASH = String.fromCharCode(0x2014);
+
 const work = mkdtempSync(join(tmpdir(), "catena-gates-test-"));
 const repo = join(work, "repo");
 const vale = join(work, "vale");
@@ -50,9 +52,15 @@ const files = {
   "gone.py": "# a comment\n",
   "gone.mjs": "// a comment\n",
   "gone.sh": "# a comment\n",
+  // Third-party copies under a vendor/ folder, at any depth, are out of scope.
+  "vendor/top.py": `# top ${DASH} used to be fine\n`,
+  "web/vendor/nested.py": `# nested ${DASH} used to be fine\n`,
 };
 mkdirSync(join(repo, ".github"), { recursive: true });
-for (const [path, body] of Object.entries(files)) writeFileSync(join(repo, path), body);
+for (const [path, body] of Object.entries(files)) {
+  mkdirSync(dirname(join(repo, path)), { recursive: true });
+  writeFileSync(join(repo, path), body);
+}
 
 const git = (...args) =>
   execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
@@ -81,6 +89,18 @@ try {
   check("check-prose.mjs", "Prose: clean (1 file(s) scanned, 1 in debt");
   check("check-unicode.mjs", "Unicode hygiene: clean (4 file(s) in scope)");
   check("check-repo-rules.mjs", "Repo rules: clean");
+
+  // A file beside a vendor/ folder is still scanned.
+  writeFileSync(join(repo, "web/vendored.py"), `# beside ${DASH} the folder\n`);
+  git("add", "web/vendored.py");
+  const beside = spawnSync(process.execPath, [join(SCRIPTS, "check-unicode.mjs")], {
+    cwd: repo,
+    encoding: "utf-8",
+  });
+  const reported = beside.stdout + beside.stderr;
+  assert.notEqual(beside.status, 0, `check-unicode.mjs passed:\n${reported}`);
+  assert.ok(reported.includes("web/vendored.py"), `check-unicode.mjs printed:\n${reported}`);
+  assert.ok(!reported.includes("nested.py") && !reported.includes("top.py"), reported);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
