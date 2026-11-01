@@ -49,7 +49,6 @@
         "EMAIL_HOST",
         "EMAIL_PORT",
         "EMAIL_HOST_USER",
-        "EMAIL_HOST_PASSWORD",
         "EMAIL_USE_TLS",
         "EMAIL_USE_SSL",
         "DEFAULT_FROM_EMAIL",
@@ -63,12 +62,14 @@
         "PING_KEY",
         "READ_KEY",
         "API_KEY",
-        "SUPERUSER_PASSWORD"
+        "SUPERUSER_PASSWORD",
+        "EMAIL_HOST_PASSWORD"
       ],
       "secrets": [
         "healthchecks_ping_key",
         "healthchecks_api_key_readonly",
-        "healthchecks_api_key_readwrite"
+        "healthchecks_api_key_readwrite",
+        "smtp_password"
       ],
       "provides": { "healthchecks": ["url", "ping_key"] },
       "reads": []
@@ -88,7 +89,8 @@
       },
       "volumes": {
         "beszel-hub-data": "catena-beszel_beszel-hub-data",
-        "agent-key": "catena-beszel_agent-key"
+        "agent-key": "catena-beszel_agent-key",
+        "relay-state": "catena-beszel_relay-state"
       },
       "sqlite": [
         { "volume": "beszel-hub-data", "file": "data.db" },
@@ -107,6 +109,7 @@
         "ADMIN_EMAIL",
         "HUB_PASSWORD",
         "TOKEN",
+        "STATE_KEY",
         "HC_URL",
         "HC_PING_KEY",
         "HUB_OIDC_SECRET",
