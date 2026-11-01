@@ -25,7 +25,7 @@
       "sqlite": [{ "volume": "gatus-data", "file": "gatus.db" }],
       "config_volume": "config",
       "env_core_writes": ["STATUS_HOST"],
-      "env_declared": ["HC_PING_KEY"],
+      "env_declared": ["SUBDOMAIN", "HC_URL", "HC_PING_KEY", "HUB_URL", "UI_TITLE"],
       "secrets": [],
       "provides": {},
       "reads": ["healthchecks", "beszel"]
@@ -55,7 +55,16 @@
         "DEFAULT_FROM_EMAIL",
         "HC_PROJECT_NAME"
       ],
-      "env_declared": ["SECRET_KEY"],
+      "env_declared": [
+        "SUBDOMAIN",
+        "SECRET_KEY",
+        "HC_URL",
+        "ADMIN_EMAIL",
+        "PING_KEY",
+        "READ_KEY",
+        "API_KEY",
+        "SUPERUSER_PASSWORD"
+      ],
       "secrets": [
         "healthchecks_ping_key",
         "healthchecks_api_key_readonly",
@@ -92,7 +101,22 @@
         "TRUSTED_PROXY_IPS",
         "HUB_OIDC_ISSUER"
       ],
-      "env_declared": [],
+      "env_declared": [
+        "SUBDOMAIN",
+        "HUB_URL",
+        "ADMIN_EMAIL",
+        "HUB_PASSWORD",
+        "TOKEN",
+        "HC_URL",
+        "HC_PING_KEY",
+        "HUB_OIDC_SECRET",
+        "SMTP_PASSWORD",
+        "SMTP_RELAY_HOST",
+        "SMTP_RELAY_PORT",
+        "SMTP_RELAY_USER",
+        "SMTP_RELAY_TLS",
+        "SMTP_RELAY_SENDER"
+      ],
       "secrets": ["beszel_oidc_client_secret", "smtp_password"],
       "provides": { "beszel": ["url"], "beszelgate": ["url"] },
       "reads": ["healthchecks"]

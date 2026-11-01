@@ -28,7 +28,7 @@ An app entry:
 | `sqlite` | SQLite files to back up: `volume` (a key of `volumes`) and `file`. |
 | `config_volume` | The volume key holding configuration other components write into (Gatus). |
 | `env_core_writes` | Keys catena-ce writes into the app's `.env` with `setenv`; the app's block never declares them. |
-| `env_declared` | Keys the block declares that core relies on. |
+| `env_declared` | Every key the block declares: settings, managed and generated. Core writes none of them. |
 | `secrets` | Store secrets the block lists. |
 | `provides` | Capability -> the `.env` key names it exposes. |
 | `reads` | Capabilities the app reads. |
