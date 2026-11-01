@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Default apps wiring",
+  "type": "object",
+  "required": ["reserved_capabilities", "apps"],
+  "additionalProperties": false,
+  "properties": {
+    "reserved_capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["provider", "readers"],
+        "additionalProperties": false,
+        "properties": {
+          "provider": { "type": "string" },
+          "readers": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "apps": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/app" }
+    }
+  },
+  "$defs": {
+    "strings": { "type": "array", "items": { "type": "string" } },
+    "port": {
+      "type": "object",
+      "required": ["published", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "published": { "type": "integer" },
+        "target": { "type": "integer" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "networks": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/strings" }
+        },
+        "ports": { "type": "array", "items": { "$ref": "#/$defs/port" } },
+        "host_network": { "type": "boolean" },
+        "docker_socket": { "type": "boolean" }
+      }
+    },
+    "app": {
+      "type": "object",
+      "required": [
+        "stack",
+        "services",
+        "volumes",
+        "sqlite",
+        "env_core_writes",
+        "env_declared",
+        "secrets",
+        "provides",
+        "reads"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stack": { "type": "string" },
+        "services": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/service" }
+        },
+        "volumes": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "sqlite": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["volume", "file"],
+            "additionalProperties": false,
+            "properties": {
+              "volume": { "type": "string" },
+              "file": { "type": "string" }
+            }
+          }
+        },
+        "config_volume": { "type": "string" },
+        "env_core_writes": { "$ref": "#/$defs/strings" },
+        "env_declared": { "$ref": "#/$defs/strings" },
+        "secrets": { "$ref": "#/$defs/strings" },
+        "provides": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/strings" }
+        },
+        "reads": { "$ref": "#/$defs/strings" }
+      }
+    }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "reserved_capabilities": {
+    "healthchecks": { "provider": "healthchecks", "readers": ["gatus", "beszel"] },
+    "beszel": { "provider": "beszel", "readers": ["gatus"] },
+    "beszelgate": { "provider": "beszel", "readers": [] }
+  },
+  "apps": {
+    "gatus": {
+      "stack": "catena-gatus",
+      "services": {
+        "app": {
+          "networks": {
+            "catena-network": ["gatus"],
+            "catena-healthchecks": [],
+            "catena-beszel": []
+          },
+          "ports": [{ "published": 18080, "target": 8080 }]
+        },
+        "base": {}
+      },
+      "volumes": {
+        "gatus-data": "catena-gatus_gatus-data",
+        "config": "catena-gatus_config"
+      },
+      "sqlite": [{ "volume": "gatus-data", "file": "gatus.db" }],
+      "config_volume": "config",
+      "env_core_writes": ["STATUS_HOST"],
+      "env_declared": ["HC_PING_KEY"],
+      "secrets": [],
+      "provides": {},
+      "reads": ["healthchecks", "beszel"]
+    },
+    "healthchecks": {
+      "stack": "catena-healthchecks",
+      "services": {
+        "app": {
+          "networks": { "catena-healthchecks": ["healthchecks"] },
+          "ports": [{ "published": 18000, "target": 8000 }]
+        }
+      },
+      "volumes": {
+        "healthchecks-data": "catena-healthchecks_healthchecks-data"
+      },
+      "sqlite": [{ "volume": "healthchecks-data", "file": "hc.sqlite" }],
+      "env_core_writes": [
+        "SITE_ROOT",
+        "SITE_NAME",
+        "ALLOWED_HOSTS",
+        "EMAIL_HOST",
+        "EMAIL_PORT",
+        "EMAIL_HOST_USER",
+        "EMAIL_HOST_PASSWORD",
+        "EMAIL_USE_TLS",
+        "EMAIL_USE_SSL",
+        "DEFAULT_FROM_EMAIL",
+        "HC_PROJECT_NAME"
+      ],
+      "env_declared": ["SECRET_KEY"],
+      "secrets": [
+        "healthchecks_ping_key",
+        "healthchecks_api_key_readonly",
+        "healthchecks_api_key_readwrite"
+      ],
+      "provides": { "healthchecks": ["url", "ping_key"] },
+      "reads": []
+    },
+    "beszel": {
+      "stack": "catena-beszel",
+      "services": {
+        "app": {
+          "networks": {
+            "catena-beszel": ["beszel-hub"],
+            "catena-beszelgate": ["beszel-hub"]
+          },
+          "ports": [{ "published": 18190, "target": 8090 }]
+        },
+        "agent": { "host_network": true, "docker_socket": true },
+        "relay": { "networks": { "catena-healthchecks": [] } }
+      },
+      "volumes": {
+        "beszel-hub-data": "catena-beszel_beszel-hub-data",
+        "agent-key": "catena-beszel_agent-key"
+      },
+      "sqlite": [
+        { "volume": "beszel-hub-data", "file": "data.db" },
+        { "volume": "beszel-hub-data", "file": "auxiliary.db" }
+      ],
+      "env_core_writes": [
+        "APP_URL",
+        "USER_CREATION",
+        "TRUSTED_AUTH_HEADER",
+        "TRUSTED_PROXY_IPS",
+        "HUB_OIDC_ISSUER"
+      ],
+      "env_declared": [],
+      "secrets": ["beszel_oidc_client_secret", "smtp_password"],
+      "provides": { "beszel": ["url"], "beszelgate": ["url"] },
+      "reads": ["healthchecks"]
+    }
+  }
+}

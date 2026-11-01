@@ -11,6 +11,7 @@ of each fact serves every repo.
 | `brand/`  | Design tokens (CSS variables) + Conthrax wordmark binary + catena logo SVG | catenahq/website, catenahq/docs |
 | `pricing/`| Pricing metadata: one flat plan (monthly price per server) plus the a-la-carte hourly rates and their billing increment | catenahq/website (renders the plan price in its pricing matrix) |
 | `legal/`  | Canonical MSA markdown + version pin (commit SHA) + effective date + published URL | catenahq/website (renders `/legal/master-agreement`) |
+| `default-apps/` | Wiring of the default apps (Gatus, Healthchecks, Beszel): stack, services, networks, ports, volumes, capabilities | catenahq/catena-ce, catenahq/catena-admin, catenahq/catena-templates, catenahq/ops |
 
 Add a new directory whenever a fact lives in more than one repo. Do
 NOT add app-specific copy, operator-only configuration, or anything

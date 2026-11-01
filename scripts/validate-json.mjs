@@ -2,7 +2,7 @@
 // validate-json.mjs
 //
 // Walks every .json under the contract directories (brand/, pricing/,
-// legal/) and confirms each one parses. Also does the minimum
+// legal/, default-apps/) and confirms each one parses. Also does the minimum
 // shape check per file documented in the per-directory READMEs.
 //
 // It catches malformed JSON and a missing or ill-typed required key,
@@ -16,7 +16,7 @@ import { dirname, resolve } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 
-const CONTRACT_DIRS = ["brand", "pricing", "legal"];
+const CONTRACT_DIRS = ["brand", "pricing", "legal", "default-apps"];
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -68,6 +68,53 @@ function validateMsaJson(file, data) {
   ok(file);
 }
 
+function validateWiringJson(file, data) {
+  const apps = data.apps;
+  const caps = data.reserved_capabilities;
+  if (!apps || typeof apps !== "object") return fail(file, "apps must be an object");
+  if (!caps || typeof caps !== "object") return fail(file, "reserved_capabilities must be an object");
+  const before = failures;
+  for (const [id, app] of Object.entries(apps)) {
+    if (app.stack !== `catena-${id}`) fail(file, `${id}: stack must be catena-${id}, got: ${app.stack}`);
+    for (const [key, name] of Object.entries(app.volumes ?? {})) {
+      if (name !== `${app.stack}_${key}`) fail(file, `${id}: volume ${key} must be named ${app.stack}_${key}, got: ${name}`);
+    }
+    for (const s of app.sqlite ?? []) {
+      if (!(s.volume in (app.volumes ?? {}))) fail(file, `${id}: sqlite volume ${s.volume} is not a volume key`);
+    }
+    if (app.config_volume !== undefined && !(app.config_volume in (app.volumes ?? {}))) {
+      fail(file, `${id}: config_volume ${app.config_volume} is not a volume key`);
+    }
+    for (const [svc, def] of Object.entries(app.services ?? {})) {
+      for (const p of def.ports ?? []) {
+        if (!Number.isInteger(p.published) || !Number.isInteger(p.target)) {
+          fail(file, `${id}.${svc}: a port pair must be two integers`);
+        }
+      }
+    }
+    for (const cap of app.reads ?? []) {
+      if (!(cap in caps)) fail(file, `${id}: reads ${cap}, which is not a reserved capability`);
+      else if (!caps[cap].readers.includes(id)) fail(file, `${id}: reads ${cap} but is not among its readers`);
+    }
+    for (const cap of Object.keys(app.provides ?? {})) {
+      if (!(cap in caps)) fail(file, `${id}: provides ${cap}, which is not a reserved capability`);
+      else if (caps[cap].provider !== id) fail(file, `${id}: provides ${cap} but the provider is ${caps[cap].provider}`);
+    }
+    for (const key of app.env_core_writes ?? []) {
+      if ((app.env_declared ?? []).includes(key)) fail(file, `${id}: ${key} is both written by core and declared`);
+    }
+  }
+  for (const [cap, { provider, readers }] of Object.entries(caps)) {
+    if (!(provider in apps)) fail(file, `${cap}: provider ${provider} is not an app of the file`);
+    else if (!(cap in (apps[provider].provides ?? {}))) fail(file, `${cap}: ${provider} does not provide it`);
+    for (const r of readers) {
+      if (!(r in apps)) fail(file, `${cap}: reader ${r} is not an app of the file`);
+      else if (!(apps[r].reads ?? []).includes(cap)) fail(file, `${cap}: ${r} does not read it`);
+    }
+  }
+  if (failures === before) ok(file);
+}
+
 console.log("validate-json:");
 for (const dir of CONTRACT_DIRS) {
   for (const file of walk(join(ROOT, dir))) {
@@ -81,6 +128,7 @@ for (const dir of CONTRACT_DIRS) {
     }
     if (rel === "pricing/tiers.json") validateTiersJson(rel, parsed);
     else if (rel === "legal/msa.json") validateMsaJson(rel, parsed);
+    else if (rel === "default-apps/wiring.json") validateWiringJson(rel, parsed);
     else ok(rel);
   }
 }
