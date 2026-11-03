@@ -90,6 +90,7 @@
       "volumes": {
         "beszel-hub-data": "catena-beszel_beszel-hub-data",
         "agent-key": "catena-beszel_agent-key",
+        "agent-data": "catena-beszel_agent-data",
         "relay-state": "catena-beszel_relay-state"
       },
       "sqlite": [
