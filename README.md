@@ -103,6 +103,91 @@ checkouts) and ignored files stay.
 `scripts/new-failures-only.test.mjs` drives the action's script
 (`new-failures-only.sh`) over a scratch repository.
 
+## Runs once per tree
+
+`.github/actions/same-tree` lets a workflow skip code it has already judged.
+A first job runs it; every other job needs that job and runs only when its
+`run` output is not `false`.
+
+The key is `tree=<tree>`, then `base=<base tree>` with `judge-change`, then
+one `<owner/name>=<branch>` line per sibling, sorted, naming the branch
+`checkout-sibling/resolve.sh` picks (the default branch by name when it picks
+none). Trees and parents come from the commits API, so no checkout is needed.
+A run that does its checks records the key as an artifact named
+`same-tree.<name>.<first 40 hex of sha256(key)>`, kept 30 days.
+
+Only a push or a pull_request run reuses: on any other event `github.sha` is
+not the code the run judges. It lists the artifacts of the record name, newest
+first, and takes the first whose run:
+- is not expired, is of this repository (never a fork's), and is not this run;
+- ran `workflow`, from an event in `source-events`;
+- has a head commit with the key's tree and, with `judge-change`, a first
+  parent with the key's base tree. Any run of the repository can upload an
+  artifact of any name, so the record alone proves nothing. A pull_request
+  run's head is the pull request's head, so it counts only when that head has
+  the merge commit's tree, which is when the pull request is up to date with
+  its base;
+- completed with `success`, or with `failure` from the same event as this run
+  (cancelled, skipped or timed out is not a result). A push judges the
+  absolute gate and a pull request only new failures, so a failure never
+  crosses between them; a success carries both ways.
+
+A found success sets `run` to `false`. A found failure does too, and fails the
+step, so the gate job turns red. Either prints
+`::notice::same tree as <url> (<state>): nothing ran` and writes the job
+summary. A source still going is waited for, polled every 30 seconds, up to
+`wait-minutes`; with no record yet, so is a push run of the checked commit and,
+on a pull request, of its head when that head has the merge commit's tree. A
+waited push run that fails leaves a pull request to run its own checks. Any
+API error means no result: the checks run, with a warning. A failed record
+upload does not fail the job.
+
+| Input | Meaning |
+| --- | --- |
+| `name` | Record name. Default the stem of the calling workflow file (the caller's in a reusable workflow). |
+| `workflow` | The file the source must have run. Default the caller's. |
+| `commits` | Lines of `<sha> [<base sha>]`. Default `github.sha` (the merge commit on a pull request). With several, `results` lists those with a result, the step never fails and nothing is recorded. |
+| `judge-change` | `true` adds the base tree to the key: the line's base, else the first parent. |
+| `siblings` | owner/name list: every repository the workflow checks out with checkout-sibling. |
+| `branch` | Passed to the sibling resolution in place of the run's branch (a tag push has none). |
+| `source-events` | Events a source run may have. Default `push pull_request schedule`. |
+| `wait-minutes` | Default 30 on a `pull_request`, 0 on other events, so a push never waits. |
+| `record` | Default `true`: a single commit that runs on a push, pull request or schedule is recorded. |
+| `token` | Reads this repository's runs, artifacts and commits. Default `github.token`; the job grants `contents: read` and `actions: read`. |
+| `sibling-token` | Reads the siblings' branches. Default `github.token`; a private sibling needs the token the workflow's checkout-sibling steps pass. |
+
+| Output | Meaning |
+| --- | --- |
+| `run` | `true` when the checks run, `false` when a result is reused. |
+| `state` | `success` or `failure` when reused, else empty. |
+| `source` | The URL of the reused run. |
+| `results` | Lines of `<sha> <state> <url>`, one per commit with a result. |
+
+```yaml
+  same-tree:
+    name: same tree (ci)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.tree.outputs.run }}
+    steps:
+      - id: tree
+        uses: catenahq/contracts/.github/actions/same-tree@main
+        with:
+          siblings: catenahq/contracts
+  test:
+    needs: same-tree
+    if: needs.same-tree.outputs.run != 'false'
+```
+
+The runner needs `gh`, `git` and `sha256sum`. `scripts/same-tree.test.mjs`
+drives `same-tree.sh` and `resolve.sh` with stubs for `gh`, `git`, `date` and
+`sleep`. The `gh` stub serves API payloads and applies the script's `--jq`
+projections with a small evaluator of the jq they use, which the test checks
+against payloads and outputs recorded from `gh api`.
+
 ## How to change a contract
 
 1. Update the artifact (e.g. `pricing/tiers.json`) and run this repo's

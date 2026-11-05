@@ -47,34 +47,7 @@ runs:
         REF_TYPE: ${{ github.ref_type }}
       run: |
         set -euo pipefail
-        candidates=()
-        if [ -n "$BRANCH" ]; then
-          candidates+=("$BRANCH")
-        elif [ "$EVENT" = pull_request ] || [ "$EVENT" = pull_request_target ]; then
-          candidates+=("$HEAD_REF" "$BASE_REF")
-        elif [ "$REF_TYPE" = branch ]; then
-          candidates+=("$REF_NAME")
-        fi
-        # The token travels in the environment, never on a command line.
-        if [ -n "$TOKEN" ]; then
-          auth="$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
-        fi
-        ref=""
-        for c in "${candidates[@]}"; do
-          [ -n "$c" ] || continue
-          # Renovate, engine-bump and scanctl name branches per repo, so a
-          # sibling's branch of the same name holds an unrelated change.
-          case "$c" in renovate/* | engine-bump/* | scanctl/*) continue ;; esac
-          found="$(git ls-remote --heads "https://github.com/$REPOSITORY.git" "refs/heads/$c")"
-          if [ -n "$found" ]; then
-            ref="$c"
-            break
-          fi
-        done
-        echo "$REPOSITORY: ${ref:-default branch}"
+        ref="$(bash "$GITHUB_ACTION_PATH/resolve.sh")"
         echo "ref=$ref" >> "$GITHUB_OUTPUT"
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       with:

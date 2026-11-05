@@ -51,7 +51,7 @@ jobs:
               | sed -E '/^  [^ :]+:[0-9]+: /{N;s/^(  [^ :]+):[0-9]+: ([^\n]*)\n +(.*)$/\1: \2 | \3/}'
       - name: Repo rules, brand smoke test, JSON artifacts and script tests
         # Script tests: comment parsers, the gates on a deleted tracked file,
-        # the new-failures-only script.
+        # the new-failures-only and same-tree scripts.
         uses: catenahq/contracts/.github/actions/new-failures-only@main
         with:
           working-directory: ${{ github.workspace }}
@@ -64,6 +64,7 @@ jobs:
             node scripts/lib/shell-comments.test.mjs
             node scripts/gates.test.mjs
             node scripts/new-failures-only.test.mjs
+            node scripts/same-tree.test.mjs
             node scripts/check-core-app-names.test.mjs
 
   duplication:

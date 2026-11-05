@@ -1,0 +1,89 @@
+name: same-tree
+description: >-
+  On a push or a pull request, reuse the result of an earlier run of the same
+  workflow that judged the same code: the tree, the base tree when the change
+  is judged, and the branch of each sibling repo. A reused failure fails the
+  step. With no result the checks run and the key is recorded for later runs.
+
+inputs:
+  name:
+    description: Record name. Default the stem of the calling workflow file.
+    default: ''
+  workflow:
+    description: The workflow file the source must have run. Default the caller's.
+    default: ''
+  commits:
+    description: >-
+      Lines of "<sha> [<base sha>]". Default github.sha (the merge commit on a
+      pull request). Several commits fill results and are never recorded.
+    default: ''
+  judge-change:
+    description: true adds the base tree to the key (base default the first parent).
+    default: 'false'
+  siblings:
+    description: owner/name list; each one's branch, as checkout-sibling resolves it, joins the key.
+    default: ''
+  branch:
+    description: Passed to the sibling resolution in place of the run's branch (a tag push has none).
+    default: ''
+  source-events:
+    description: Events a source run may have.
+    default: push pull_request schedule
+  wait-minutes:
+    description: >-
+      How long to wait for a source still going. Default 30 on a pull_request,
+      0 on other events.
+    default: ''
+  record:
+    description: true records the key when a single commit runs on a push, pull_request or schedule.
+    default: 'true'
+  token:
+    description: Reads this repository's runs, artifacts and commits.
+    default: ${{ github.token }}
+  sibling-token:
+    description: Reads the siblings' branches (a private sibling needs more than the default).
+    default: ${{ github.token }}
+
+outputs:
+  run:
+    description: "'true' when the checks run, 'false' when a result is reused."
+    value: ${{ steps.tree.outputs.run }}
+  state:
+    description: The reused result, success or failure; empty when the checks run.
+    value: ${{ steps.tree.outputs.state }}
+  source:
+    description: The URL of the run whose result is reused.
+    value: ${{ steps.tree.outputs.source }}
+  results:
+    description: Lines of "<sha> <state> <url>", one per commit with a result.
+    value: ${{ steps.tree.outputs.results }}
+
+runs:
+  using: composite
+  steps:
+    - id: tree
+      shell: bash
+      env:
+        ST_NAME: ${{ inputs.name }}
+        ST_WORKFLOW: ${{ inputs.workflow }}
+        ST_COMMITS: ${{ inputs.commits }}
+        ST_JUDGE_CHANGE: ${{ inputs.judge-change }}
+        ST_SIBLINGS: ${{ inputs.siblings }}
+        ST_BRANCH: ${{ inputs.branch }}
+        ST_SOURCE_EVENTS: ${{ inputs.source-events }}
+        ST_WAIT_MINUTES: ${{ inputs.wait-minutes }}
+        ST_RECORD: ${{ inputs.record }}
+        ST_PR_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+        GH_TOKEN: ${{ inputs.token }}
+        ST_SIBLING_TOKEN: ${{ inputs.sibling-token }}
+      run: bash "$GITHUB_ACTION_PATH/same-tree.sh"
+    # A failed upload loses only the record: later runs of this code run again.
+    - if: steps.tree.outputs.upload-path != ''
+      continue-on-error: true
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ steps.tree.outputs.upload-name }}
+        path: ${{ steps.tree.outputs.upload-path }}
+        retention-days: 30
+        if-no-files-found: error
+        overwrite: true
