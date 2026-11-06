@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Moves the pin of an image to a version in the named files of a templates
 # repository, pushes the branch image-pin/<app> and opens the pull request, or
-# updates the open one. A repository that already pins the version is left alone.
+# updates the open one. A malformed version is refused; a repository that already
+# pins the version, or a newer one, is left alone.
 #
 # Input (environment):
 #   GH_TOKEN         token for the clone, the push and the pull request calls
@@ -17,6 +18,10 @@
 set -euo pipefail
 
 repo="$IPP_REPOSITORY"
+if ! [[ "$IPP_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "::error::the version '$IPP_VERSION' must have the form X.Y.Z or vX.Y.Z."
+  exit 1
+fi
 auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
 echo "::add-mask::$auth"
 export GIT_CONFIG_COUNT=1
@@ -35,7 +40,20 @@ done <<< "$IPP_FILES"
 # The image holds dots and slashes: escape them for the sed pattern.
 image_re="$(printf '%s' "$IPP_IMAGE" | sed 's@[.*^$/\\[]@\\&@g')"
 version_re="$(printf '%s' "$IPP_VERSION" | sed 's@[&\\#]@\\&@g')"
-sed -i -E "s#${image_re}:v?[0-9]+\.[0-9]+\.[0-9]+#${IPP_IMAGE}:${version_re}#g" "${files[@]}"
+# A pin is a whole tag: X.Y.Z followed by a character a tag cannot hold, or the line end.
+pin_re="${image_re}:v?[0-9]+\.[0-9]+\.[0-9]+([^0-9A-Za-z._-]|\$)"
+
+# A pin is never lowered: a current pin newer than the version stops the run.
+want="${IPP_VERSION#v}"
+while IFS= read -r current; do
+  current="${current#v}"
+  if [ "$current" != "$want" ] && [ "$(printf '%s\n%s\n' "$current" "$want" | sort -V | tail -n 1)" = "$current" ]; then
+    echo "$repo already pins $IPP_IMAGE at $current, not lower than $IPP_VERSION"
+    exit 0
+  fi
+done < <(grep -hoE "$pin_re" "${files[@]}" | sed -E "s#^.*:(v?[0-9.]+)([^0-9A-Za-z._-].*)?\$#\\1#" || true)
+
+sed -i -E "s#${pin_re}#${IPP_IMAGE}:${version_re}\\1#g" "${files[@]}"
 
 if git diff --quiet; then
   echo "$repo already pins $IPP_IMAGE:$IPP_VERSION"

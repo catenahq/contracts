@@ -41,8 +41,8 @@ const files = {
 };
 
 let n = 0;
-// A fresh remote holding `files`, then one run of the script.
-function run({ version, pr = "", named = ["blueprints/a/services.yml", "blueprints/a/app.json"] }) {
+// A fresh remote holding `files` (or `seedFiles`), then one run of the script.
+function run({ version, pr = "", named = ["blueprints/a/services.yml", "blueprints/a/app.json"], seedFiles = files }) {
   const root = join(work, `case${n++}`);
   const base = join(root, "remote");
   const bare = join(base, "o", "templates.git");
@@ -51,7 +51,7 @@ function run({ version, pr = "", named = ["blueprints/a/services.yml", "blueprin
   const seed = join(root, "seed");
   mkdirSync(seed);
   git(seed, "init", "-q", "-b", "trunk");
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Object.entries(seedFiles)) {
     mkdirSync(dirname(join(seed, path)), { recursive: true });
     writeFileSync(join(seed, path), text);
   }
@@ -131,6 +131,32 @@ try {
     assert.equal(calls[1], "api -X PATCH repos/o/templates/pulls/7 -f title=chore(reports): pin v0.13.0 -f body=the body");
     assert.ok(!calls.some((c) => c.startsWith("pr create")));
     assert.match(r.stdout, /updated https:\/\/github\.com\/o\/templates\/pull\/7/);
+  }
+  // A suffixed tag is not a bare X.Y.Z pin: it stays, the whole pin beside it moves.
+  {
+    const seedFiles = { "blueprints/a/services.yml": `image: ${IMAGE}:v0.12.0\nrc: ${IMAGE}:v1.2.3-rc.1\n` };
+    const { r, pinned } = run({ version: "v0.13.0", named: ["blueprints/a/services.yml"], seedFiles });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(pinned("blueprints/a/services.yml"), `image: ${IMAGE}:v0.13.0\nrc: ${IMAGE}:v1.2.3-rc.1\n`);
+  }
+
+  // A malformed version: refused before the clone, nothing pushed.
+  for (const version of ["latest", "v0.13", "v0.13.0-rc.1", "0.13.0 ", ""]) {
+    const { r, calls, branch } = run({ version });
+    assert.equal(r.status, 1, `${version}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /must have the form/);
+    assert.equal(branch, false);
+    assert.deepEqual(calls, []);
+  }
+
+  // A newer current pin: never lowered, nothing pushed, no gh call.
+  {
+    const seedFiles = { "blueprints/a/services.yml": `image: ${IMAGE}:v0.14.0\n` };
+    const { r, calls, branch } = run({ version: "v0.13.0", named: ["blueprints/a/services.yml"], seedFiles });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, new RegExp(`o/templates already pins ${IMAGE} at 0\\.14\\.0, not lower than v0\\.13\\.0`));
+    assert.equal(branch, false);
+    assert.deepEqual(calls, []);
   }
   console.log("image-pin-pr: ok");
 } finally {
