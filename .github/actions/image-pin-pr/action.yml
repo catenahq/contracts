@@ -1,0 +1,43 @@
+name: image-pin-pr
+description: >-
+  Opens or updates the pull request that pins a new release of an app's own
+  image in a templates repository. The pin moves in the named files on the
+  branch image-pin/<app>; a repository that already pins the version gets no
+  pull request.
+
+inputs:
+  token:
+    description: Token that pushes branches and writes pull requests in the repository.
+    required: true
+  repository:
+    description: The templates repository, owner/name.
+    required: true
+  app:
+    description: The app name; names the branch image-pin/<app> and the commit.
+    required: true
+  image:
+    description: The image without a tag, for example ghcr.io/catenahq/catena-reports.
+    required: true
+  version:
+    description: The version as the pin spells it, for example 0.5.1 or v0.13.0.
+    required: true
+  files:
+    description: Repository-relative paths holding the pin, one per line.
+    required: true
+  body:
+    description: The pull request body.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        IPP_REPOSITORY: ${{ inputs.repository }}
+        IPP_APP: ${{ inputs.app }}
+        IPP_IMAGE: ${{ inputs.image }}
+        IPP_VERSION: ${{ inputs.version }}
+        IPP_FILES: ${{ inputs.files }}
+        IPP_BODY: ${{ inputs.body }}
+      run: bash "$GITHUB_ACTION_PATH/image-pin-pr.sh"

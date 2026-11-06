@@ -51,6 +51,7 @@ in `BRANCH_ALLOW` (`scripts/check-repo-rules.mjs`).
 | `.github/actions/checkout-sibling/` | Checks out a sibling repo at the branch the run is on (same name unless a bot named it, else a pull request's base, else the default branch); `resolve.sh` picks the branch, for same-tree too. |
 | `.github/actions/new-failures-only/` | Runs a gate command: with no base commit it keeps the absolute gate; with one (the `base` input, else a pull request's merge commit first parent, else the event's base) it fails only on failure lines that commit lacks (README.md, "Changes fail only on new failures"). |
 | `.github/actions/same-tree/` | On a push or pull request, reuses the result of an earlier run of the same workflow that judged the same tree and sibling branches, and records the key when the checks run (README.md, "Runs once per tree"). |
+| `.github/actions/image-pin-pr/` | Moves the pin of an app's own image to a version in the named files of a templates repository, pushes the branch `image-pin/<app>`, and opens the pull request or updates the open one; a repository that already pins the version gets none. |
 | `scripts/sync-brand-assets.mjs` | Copies the logo into the consuming site's `public/favicon.svg`. Each site's `postinstall`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
 | `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |
