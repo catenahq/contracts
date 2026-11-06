@@ -25,7 +25,7 @@
       "sqlite": [{ "volume": "gatus-data", "file": "gatus.db" }],
       "config_volume": "config",
       "env_core_writes": ["STATUS_HOST"],
-      "env_declared": ["SUBDOMAIN", "HC_URL", "HC_PING_KEY", "HUB_URL", "UI_TITLE"],
+      "env_declared": ["SUBDOMAIN", "HC_URL", "HC_PING_KEY", "HUB_URL", "UI_TITLE", "UPDATE_LEVEL"],
       "secrets": [],
       "provides": {},
       "reads": ["healthchecks", "beszel"]
@@ -63,7 +63,8 @@
         "READ_KEY",
         "API_KEY",
         "SUPERUSER_PASSWORD",
-        "EMAIL_HOST_PASSWORD"
+        "EMAIL_HOST_PASSWORD",
+        "UPDATE_LEVEL"
       ],
       "secrets": [
         "healthchecks_ping_key",
@@ -119,7 +120,8 @@
         "SMTP_RELAY_PORT",
         "SMTP_RELAY_USER",
         "SMTP_RELAY_TLS",
-        "SMTP_RELAY_SENDER"
+        "SMTP_RELAY_SENDER",
+        "UPDATE_LEVEL"
       ],
       "secrets": ["beszel_oidc_client_secret", "smtp_password"],
       "provides": { "beszel": ["url"], "beszelgate": ["url"] },
