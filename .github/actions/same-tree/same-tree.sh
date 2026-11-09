@@ -16,6 +16,7 @@
 #                     second field, else the first parent)
 #   ST_SIBLINGS       owner/name list; each one's branch joins the key
 #   ST_BRANCH         passed to checkout-sibling/resolve.sh
+#   ST_DEFAULT_BRANCH the run's default branch, passed to resolve.sh
 #   ST_SOURCE_EVENTS  events a source run may have
 #   ST_WAIT_MINUTES   how long to wait for a source still going; default 30
 #                     on a pull_request, 0 otherwise
@@ -145,7 +146,7 @@ sibling_lines() {
   for s in "${SIBLINGS[@]}"; do
     ref="$(REPOSITORY="$s" TOKEN="${ST_SIBLING_TOKEN:-}" BRANCH="${ST_BRANCH:-}" EVENT="$EVENT" \
       HEAD_REF="${GITHUB_HEAD_REF:-}" BASE_REF="${GITHUB_BASE_REF:-}" \
-      REF_NAME="${GITHUB_REF_NAME:-}" REF_TYPE="${GITHUB_REF_TYPE:-}" bash "$RESOLVE")" || return 1
+      REF_NAME="${GITHUB_REF_NAME:-}" REF_TYPE="${GITHUB_REF_TYPE:-}" DEFAULT_BRANCH="${ST_DEFAULT_BRANCH:-}" bash "$RESOLVE")" || return 1
     [ -n "$ref" ] || ref="$(default_branch "$s")"
     [ -n "$ref" ] || return 1
     printf '%s=%s\n' "$s" "$ref"

@@ -36,7 +36,8 @@ checkout, so an edit here is visible on the consumer's next dev/build.
 CI mirrors the layout: each consumer's workflow checks this repo out
 alongside itself with `.github/actions/checkout-sibling`, at the branch
 the consumer runs on when this repo has it and a bot did not name it,
-else at the default branch.
+else at the default branch. A run on its own repository's default branch
+takes the default branch here too.
 The scripts under `scripts/` (unicode, prose, repo-rule and core-app-name
 gates, and the brand-asset sync each site runs on install) run from that
 checkout the same way. The core-app-name gate takes the roots to scan as

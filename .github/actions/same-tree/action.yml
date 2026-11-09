@@ -74,6 +74,7 @@ runs:
         ST_WAIT_MINUTES: ${{ inputs.wait-minutes }}
         ST_RECORD: ${{ inputs.record }}
         ST_PR_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+        ST_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         GH_TOKEN: ${{ inputs.token }}
         ST_SIBLING_TOKEN: ${{ inputs.sibling-token }}
       run: bash "$GITHUB_ACTION_PATH/same-tree.sh"

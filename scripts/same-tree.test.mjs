@@ -686,6 +686,16 @@ try {
   assert.equal(ref({ EVENT: "push", REF_TYPE: "tag", REF_NAME: "v1.0.0" }), "");
   assert.equal(ref({ EVENT: "push", REF_TYPE: "tag", REF_NAME: "v1.0.0", BRANCH: "main" }), "main");
   assert.equal(ref({ EVENT: "push", REF_TYPE: "branch", REF_NAME: "dev", BRANCH: "main" }), "main");
+  // A candidate from the run's context that is the default branch ends the
+  // search with the sibling's default branch; BRANCH is taken as given.
+  const onDefault = { DEFAULT_BRANCH: "main" };
+  assert.equal(ref({ ...onDefault, EVENT: "push", REF_TYPE: "branch", REF_NAME: "main" }), "");
+  assert.equal(ref({ ...onDefault, EVENT: "push", REF_TYPE: "branch", REF_NAME: "feature" }), "feature");
+  assert.equal(ref({ ...onDefault, EVENT: "pull_request", HEAD_REF: "nope", BASE_REF: "main" }), "");
+  assert.equal(ref({ ...onDefault, EVENT: "pull_request", HEAD_REF: "feature", BASE_REF: "main" }), "feature");
+  assert.equal(ref({ ...onDefault, EVENT: "push", REF_TYPE: "tag", REF_NAME: "v1.0.0", BRANCH: "main" }), "main");
+  assert.equal(ref({ EVENT: "push", REF_TYPE: "branch", REF_NAME: "main" }), "main");
+  assert.equal(ref({ ...onDefault, EVENT: "push", REF_TYPE: "branch", REF_NAME: "renovate/x" }), "");
   got = resolve({ EVENT: "push", REF_TYPE: "branch", REF_NAME: "dev", TOKEN: "s3cr3t-token" });
   assert.ok(got.calls.includes("refs/heads/dev [auth s3cr3t-token]"), got.calls);
   got = exec({ gitFail: true }, { REPOSITORY: "catenahq/sib", EVENT: "push", REF_TYPE: "branch", REF_NAME: "dev" }, RESOLVE);
