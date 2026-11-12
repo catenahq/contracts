@@ -17,6 +17,11 @@ depends on. See README.md for the layout + consumer model.
   side by side. No EN-only or FR-only contracts.
 - No emojis or em-dashes in any artifact. Plain hyphens + straight
   quotes only.
+- Legal and privacy text states the custody list: the operator holds the client's
+  contact information and helpdesk tickets, nothing else.
+- No edition price is written in a file: prices live on the Polar products
+  (`pricing/README.md`). A pricing or legal edit names the three editions:
+  Community, Catena Pro, Catena Business.
 
 ## Workspace hygiene gates (this repo owns them)
 
