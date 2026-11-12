@@ -10,6 +10,11 @@
 // catches what a .gitignore cannot: a file added with git add -f, or one
 // tracked before the rule.
 //
+// Agent files. .agent/ holds an agent run's plan, notes and checkpoint, which
+// are not repo content: the rule fails on every branch the repo's CI runs on
+// (a paused agent branch included, which stays red until a later run removes
+// them), so no tracked path is .agent or under .agent/.
+//
 // Branch names. Everything builds and checks out the branch it runs on, so a
 // branch name belongs only where a run is decided (on: triggers, if:
 // conditions, a release guard) and in a first-party uses: line, which GitHub
@@ -45,9 +50,14 @@ if (at.every((i) => i !== -1) && !(at[0] < at[2] && at[1] < at[2])) {
   problems.push(`.gitignore must list ${ENV_RULE[2]} after ${ENV_RULE[0]} and ${ENV_RULE[1]}, or it re-includes nothing`);
 }
 
-const files = execSync("git ls-files", { encoding: "utf-8" }).split("\n").filter(Boolean);
+// -z: git quotes a path with non-ASCII characters otherwise, and no quoted path matches a rule.
+const files = execSync("git ls-files -z", { encoding: "utf-8" }).split("\0").filter(Boolean);
 for (const file of files.filter(isEnvFile)) {
   problems.push(`${file} is a tracked env file; untrack it (git rm --cached) and keep its values out of git`);
+}
+
+for (const file of files.filter((f) => f === ".agent" || f.startsWith(".agent/"))) {
+  problems.push(`${file} is tracked as .agent, which no branch may hold; untrack it (git rm)`);
 }
 
 const BRANCH = "(?:main|master|dev|develop)";

@@ -40,7 +40,10 @@ else at the default branch. A run on its own repository's default branch
 takes the default branch here too.
 The scripts under `scripts/` (unicode, prose, repo-rule and core-app-name
 gates, and the brand-asset sync each site runs on install) run from that
-checkout the same way. The core-app-name gate takes the roots to scan as
+checkout the same way. The repo-rule gate refuses a tracked env file, a
+tracked `.agent` path (on every branch the repo's CI runs on, so an agent
+branch that holds `.agent/` fails it until a later run removes it) and a branch
+name where something is checked out, installed or compared. The core-app-name gate takes the roots to scan as
 arguments (catena-ce `.`; catena-admin `--exclude central/ .`) and keeps
 its debt in the consumer's `.github/core-app-names-debt.json` and its
 accepted uses in `.github/core-app-names-exceptions.json`.
