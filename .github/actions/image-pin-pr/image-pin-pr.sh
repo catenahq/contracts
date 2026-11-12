@@ -14,8 +14,24 @@
 #   IPP_BODY         pull request body
 #   IMAGE_PIN_PR_REMOTE_BASE  clone URL base, default https://github.com; only
 #                    the test sets it, to a directory of local bare repositories
+#   IMAGE_PIN_PR_RETRY_SECONDS  pause between tries of a git network call,
+#                    default 10; only the test sets it
 #   RUNNER_TEMP      parent of the clone, default /tmp
 set -euo pipefail
+
+# A git call to GitHub fails now and then on a transient network error, such as
+# "Error in the HTTP2 framing layer". The clone and the forced push are safe to
+# repeat, so each gets three tries.
+retry() {
+  local try
+  for try in 1 2 3; do
+    "$@" && return 0
+    [ "$try" = 3 ] && break
+    echo "::warning::try $try of '$*' failed; trying again"
+    sleep "${IMAGE_PIN_PR_RETRY_SECONDS:-10}"
+  done
+  return 1
+}
 
 repo="$IPP_REPOSITORY"
 if ! [[ "$IPP_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -29,7 +45,7 @@ export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
 export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
 
 dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/image-pin-pr.XXXXXX")"
-git clone --depth 1 "${IMAGE_PIN_PR_REMOTE_BASE:-https://github.com}/$repo.git" "$dir"
+retry git clone --depth 1 "${IMAGE_PIN_PR_REMOTE_BASE:-https://github.com}/$repo.git" "$dir"
 cd "$dir"
 
 files=()
@@ -66,7 +82,7 @@ git config user.name "catena image pin"
 git config user.email "image-pin@users.noreply.github.com"
 git checkout -B "$branch"
 git commit -qam "$title"
-git push --force origin "$branch"
+retry git push --force origin "$branch"
 
 number="$(gh pr list --repo "$repo" --head "$branch" --state open --json number --jq '.[0].number // empty')"
 if [ -n "$number" ]; then

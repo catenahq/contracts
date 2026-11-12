@@ -42,7 +42,8 @@ const files = {
 
 let n = 0;
 // A fresh remote holding `files` (or `seedFiles`), then one run of the script.
-function run({ version, pr = "", named = ["blueprints/a/services.yml", "blueprints/a/app.json"], seedFiles = files }) {
+// `failPushes` makes the remote refuse that many pushes before it takes one.
+function run({ version, pr = "", named = ["blueprints/a/services.yml", "blueprints/a/app.json"], seedFiles = files, failPushes = 0 }) {
   const root = join(work, `case${n++}`);
   const base = join(root, "remote");
   const bare = join(base, "o", "templates.git");
@@ -58,6 +59,21 @@ function run({ version, pr = "", named = ["blueprints/a/services.yml", "blueprin
   git(seed, "add", "-A");
   git(seed, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "seed");
   git(seed, "push", "-q", bare, "trunk");
+  if (failPushes > 0) {
+    const hook = join(bare, "hooks", "pre-receive");
+    writeFileSync(
+      hook,
+      `#!/usr/bin/env bash
+count="$(cat refused 2>/dev/null || echo 0)"
+if [ "$count" -lt ${failPushes} ]; then
+  echo $((count + 1)) > refused
+  echo "push refused" >&2
+  exit 1
+fi
+`,
+    );
+    chmodSync(hook, 0o755);
+  }
   const log = join(root, "gh.log");
   writeFileSync(log, "");
   const r = spawnSync("bash", [SCRIPT], {
@@ -71,6 +87,7 @@ function run({ version, pr = "", named = ["blueprints/a/services.yml", "blueprin
       GH_STUB_PR: pr,
       GH_STUB_DEFAULT: "trunk",
       IMAGE_PIN_PR_REMOTE_BASE: `file://${base}`,
+      IMAGE_PIN_PR_RETRY_SECONDS: "0",
       IPP_REPOSITORY: "o/templates",
       IPP_APP: "reports",
       IPP_IMAGE: IMAGE,
@@ -155,6 +172,23 @@ try {
     const { r, calls, branch } = run({ version: "v0.13.0", named: ["blueprints/a/services.yml"], seedFiles });
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, new RegExp(`o/templates already pins ${IMAGE} at 0\\.14\\.0, not lower than v0\\.13\\.0`));
+    assert.equal(branch, false);
+    assert.deepEqual(calls, []);
+  }
+
+  // A push that fails twice is tried again and lands on the third try.
+  {
+    const { r, branch, calls } = run({ version: "v0.13.0", failPushes: 2 });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(branch, true);
+    assert.equal((r.stdout.match(/::warning::try \d of 'git push/g) || []).length, 2);
+    assert.ok(calls.some((c) => c.startsWith("pr create")));
+  }
+
+  // A push that fails three times fails the run before any pull request call.
+  {
+    const { r, branch, calls } = run({ version: "v0.13.0", failPushes: 3 });
+    assert.notEqual(r.status, 0);
     assert.equal(branch, false);
     assert.deepEqual(calls, []);
   }
