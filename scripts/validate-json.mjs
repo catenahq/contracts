@@ -58,6 +58,21 @@ function validateTiersJson(file, data) {
   ok(file);
 }
 
+function validateCheckoutJson(file, data) {
+  const editions = ["business", "pro"];
+  const keys = Object.keys(data).sort();
+  if (keys.join(",") !== editions.join(",")) {
+    return fail(file, `keys must be exactly ${editions.join(", ")}, got: ${keys.join(", ")}`);
+  }
+  for (const edition of editions) {
+    const url = data[edition];
+    if (typeof url !== "string" || !url.startsWith("https://buy.polar.sh/")) {
+      return fail(file, `${edition} must be a https://buy.polar.sh/ checkout link, got: ${url}`);
+    }
+  }
+  ok(file);
+}
+
 function validateMsaJson(file, data) {
   for (const key of ["version", "sourceUrl", "effectiveDate"]) {
     if (!(key in data)) return fail(file, `missing ${key}`);
@@ -127,6 +142,7 @@ for (const dir of CONTRACT_DIRS) {
       continue;
     }
     if (rel === "pricing/tiers.json") validateTiersJson(rel, parsed);
+    else if (rel === "pricing/checkout.json") validateCheckoutJson(rel, parsed);
     else if (rel === "legal/msa.json") validateMsaJson(rel, parsed);
     else if (rel === "default-apps/wiring.json") validateWiringJson(rel, parsed);
     else ok(rel);

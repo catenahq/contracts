@@ -1,6 +1,6 @@
 {
   "name": "@catenahq/contracts",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "private": false,
   "description": "Shared contracts for the catena repos: brand tokens + wordmark assets, pricing tier metadata, legal MSA pin + canonical text. Consumers read it as a sibling checkout.",
   "type": "module",
@@ -11,6 +11,7 @@
     "./brand/theme.css": "./brand/theme.css",
     "./brand/fonts.mjs": "./brand/fonts.mjs",
     "./pricing/tiers.json": "./pricing/tiers.json",
+    "./pricing/checkout.json": "./pricing/checkout.json",
     "./legal/msa.json": "./legal/msa.json",
     "./legal/master-agreement.md": "./legal/master-agreement.md",
     "./legal/sla.md": "./legal/sla.md",
