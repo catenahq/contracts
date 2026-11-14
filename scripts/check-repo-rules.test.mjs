@@ -60,6 +60,33 @@ try {
   r = run();
   assert.equal(r.status, 1, r.out);
   assert.ok(r.out.includes(".agent is tracked as .agent"), r.out);
+  git("rm", "-q", "--cached", ".agent");
+  rmSync(join(work, ".agent"));
+
+  // .agents files that are repo content, and names that only look like the state paths, pass.
+  put(".agents/AGENTS.md", "x\n");
+  put(".agents-notes.md", "x\n");
+  put(".agents/loop-state-notes.md", "x\n");
+  put("src/.agents/tmp/x", "x\n");
+  r = run();
+  assert.equal(r.status, 0, r.out);
+
+  // Tracked aidevops runtime state fails and is named.
+  put(".agents/loop-state/x", "x\n");
+  put(".agents/tmp/y/z", "x\n");
+  put(".agents/memory/m.db", "x\n");
+  put(".agents/.full-loop-cleanup-deferred", "x\n");
+  r = run();
+  assert.equal(r.status, 1, r.out);
+  for (const f of [".agents/loop-state/x", ".agents/tmp/y/z", ".agents/memory/m.db", ".agents/.full-loop-cleanup-deferred"]) {
+    assert.ok(r.out.includes(`${f} is tracked aidevops runtime state`), r.out);
+  }
+  assert.ok(!r.out.includes(".agents/AGENTS.md"), r.out);
+
+  // Untracked, the state passes.
+  git("rm", "-q", "--cached", ".agents/loop-state/x", ".agents/tmp/y/z", ".agents/memory/m.db", ".agents/.full-loop-cleanup-deferred");
+  r = run();
+  assert.equal(r.status, 0, r.out);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

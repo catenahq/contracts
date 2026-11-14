@@ -42,7 +42,9 @@ The scripts under `scripts/` (unicode, prose, repo-rule and core-app-name
 gates, and the brand-asset sync each site runs on install) run from that
 checkout the same way. The repo-rule gate refuses a tracked env file, a
 tracked `.agent` path (on every branch the repo's CI runs on, so an agent
-branch that holds `.agent/` fails it until a later run removes it) and a branch
+branch that holds `.agent/` fails it until a later run removes it), a tracked
+aidevops runtime-state path (`.agents/loop-state/`, `.agents/tmp/`,
+`.agents/memory/`, `.agents/.full-loop-cleanup-deferred`) and a branch
 name where something is checked out, installed or compared. The core-app-name gate takes the roots to scan as
 arguments (catena-ce `.`; catena-admin `--exclude central/ .`) and keeps
 its debt in the consumer's `.github/core-app-names-debt.json` and its

@@ -13,7 +13,10 @@
 // Agent files. .agent/ holds an agent run's plan, notes and checkpoint, which
 // are not repo content: the rule fails on every branch the repo's CI runs on
 // (a paused agent branch included, which stays red until a later run removes
-// them), so no tracked path is .agent or under .agent/.
+// them), so no tracked path is .agent or under .agent/. The runtime state an
+// aidevops worker keeps in its worktree (.agents/loop-state/, .agents/tmp/,
+// .agents/memory/ and .agents/.full-loop-cleanup-deferred) is no repo content
+// either, and a worker's git add -A would stage it, so none is tracked.
 //
 // Branch names. Everything builds and checks out the branch it runs on, so a
 // branch name belongs only where a run is decided (on: triggers, if:
@@ -58,6 +61,12 @@ for (const file of files.filter(isEnvFile)) {
 
 for (const file of files.filter((f) => f === ".agent" || f.startsWith(".agent/"))) {
   problems.push(`${file} is tracked as .agent, which no branch may hold; untrack it (git rm)`);
+}
+
+const RUNTIME_DIRS = [".agents/loop-state/", ".agents/tmp/", ".agents/memory/"];
+const RUNTIME_FILES = [".agents/.full-loop-cleanup-deferred"];
+for (const file of files.filter((f) => RUNTIME_FILES.includes(f) || RUNTIME_DIRS.some((d) => f.startsWith(d)))) {
+  problems.push(`${file} is tracked aidevops runtime state, which no branch may hold; untrack it (git rm --cached)`);
 }
 
 const BRANCH = "(?:main|master|dev|develop)";
