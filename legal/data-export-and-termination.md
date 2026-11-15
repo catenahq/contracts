@@ -1,7 +1,7 @@
 # Data export and termination (Schedule C)
 
-**Version:** 1.1
-**Last reviewed:** 2026-10-06
+**Version:** 1.2
+**Last reviewed:** 2026-11-15
 
 > Schedule C to the [Master Services Agreement](master-agreement.md).
 > Implements the data-export commitment in master agreement section
@@ -39,16 +39,14 @@ on the Client's server.
 Operator assists the Client with an export within **five (5)
 business days**, or within a longer period agreed in writing.
 
-2.3 The first assisted export per calendar quarter is included in the
-Subscription for any Suite with an active Server Subscription;
-additional assistance may be billed at the published hourly rate per
-Master Agreement section 3.3.
+2.3 The first assisted export per calendar quarter is included in
+Catena Business; additional assistance may be billed at the published
+hourly rate per Master Agreement section 3.3.
 
 ## 3. Termination notice
 
 3.1 Either Party may terminate by giving the other **thirty (30)
-days'** written notice, after the initial six-month commitment for
-the recurring Subscription.
+days'** written notice.
 
 3.2 The notice period begins on receipt of the notice and ends on
 the termination date. Service continues at the contracted level

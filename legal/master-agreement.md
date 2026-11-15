@@ -1,17 +1,17 @@
 # Master Services Agreement
 
 **Version pin:** see `legal/msa.json` in this package
-**Last reviewed:** 2026-10-06
+**Last reviewed:** 2026-11-15
 **Compliance baseline:** Loi 25 + CAI corporate-responsibility guide (Feb 2023)
 
 > Template. `[OPERATOR_LEGAL_NAME]`, `[CLIENT_LEGAL_NAME]`,
 > `[CLIENT_ADDRESS]`, and `[EFFECTIVE_DATE]` are replaced on the
-> executed copy issued with the Order Form. The Subscription
-> composition (server + apps + optional support pack + installer)
-> is recorded on the Order Form, not in this template body. The
-> Operator records the commit SHA in `legal/msa.json.version` against
-> the Client's acceptance in its client records, so the binding text
-> can be reconstructed for any given client.
+> executed copy issued with the Order Form. The Edition selected
+> (Community, Catena Pro or Catena Business) is recorded on the Order
+> Form, not in this template body. The Operator records the commit SHA
+> in `legal/msa.json.version` against the Client's acceptance in its
+> client records, so the binding text can be reconstructed for any
+> given client.
 
 ---
 
@@ -32,17 +32,21 @@ The Operator and the Client are each a **"Party"** and together the
 
 ### 1. Definitions
 
-- **Suite**: the catena-managed self-hosting stack the Operator
-  provisions for the Client, comprising one or more software
-  applications drawn from the catena vetted catalogue.
-- **Subscription**: the Client's selection of recurring Operator
-  services, comprising the Server Subscription, App Subscriptions
-  (one per managed application beyond Nextcloud + OnlyOffice), and
-  an optional Support Pack, as defined on the Operator's pricing page
-  and recorded on the Order Form.
-- **Installer Fee**: the one-time setup fee (Base or Assisted) at
-  the start of the engagement, billed at order acceptance, as
-  defined on the Operator's pricing page.
+- **Suite**: the self-hosted software stack the Client installs on
+  its own server, comprising one or more software applications drawn
+  from the catena vetted catalogue.
+- **Edition**: one of Community, Catena Pro or Catena Business, as
+  selected on the Order Form. The contents of each Edition are
+  published on the Operator's pricing page. Community is free and
+  self-hosted. Catena Pro and Catena Business are each one flat
+  monthly price per server, with unlimited applications.
+- **Subscription**: the monthly recurring licence of Catena Pro or
+  Catena Business, sold through Polar and activated on the Client's
+  server by a licence key.
+- **Licence key**: the key Polar issues for a Subscription. It
+  activates the Edition on one server at a time.
+- **Order Form**: the document that records the Edition selected and
+  the Client's acceptance of this Agreement.
 - **Personal Information**: as defined in section 2 of *An Act
   respecting the protection of personal information in the private
   sector* (CQLR c. P-39.1).
@@ -52,34 +56,34 @@ The Operator and the Client are each a **"Party"** and together the
 
 ### 2. Services
 
-The Operator will provision, configure, and operate the Suite for the
-Client per the Subscription set out in the Order Form. The operational
-scope is published on the Operator's pricing page; the Service Level
-Agreement at Schedule A governs uptime and response-time commitments.
-Schedules are appended to the executed copy of this Agreement issued
-with the Order Form.
+The Client installs and runs the Suite on its own server. The Edition
+selected on the Order Form determines what the Operator provides, as
+published on the Operator's pricing page. Community is free and
+self-hosted. Catena Pro and Catena Business are supplied as a monthly
+Subscription activated by a licence key sold through Polar; Catena
+Business also includes the service level in Schedule A. Schedules are
+appended to the executed copy of this Agreement issued with the Order
+Form.
 
 ### 3. Fees and billing
 
-3.1 **Charges.** Fees are as published on the Operator's pricing page
-on the Effective Date. The Installer Fee is billed at order
-acceptance. The recurring Subscription components (Server
-Subscription, App Subscriptions, and any Support Pack selected) are
-billed monthly in advance, with a minimum commitment of **six (6)
-months** from the install-completion date for the recurring
-Subscription.
+3.1 **Charges.** The Edition price is as published on the Operator's
+pricing page and on the Polar product on the Effective Date. The
+Subscription is billed monthly in advance through Polar, with no
+minimum term. Community is free.
 
-3.2 **Currency.** All amounts are in Canadian dollars (CAD).
+3.2 **Currency.** Fees are charged in the currency shown on the Polar
+product at checkout.
 
-3.3 **À-la-carte support.** Support beyond an active Support Pack, or
-support time used when no Support Pack is in effect, is billed at the
-published hourly rate in 15-minute increments. Support is provided
-during business hours as defined in Schedule A.
+3.3 **À-la-carte support.** Hands-on work outside the support an
+Edition includes is billed at the published hourly rate in 15-minute
+increments. Support is provided during business hours as defined in
+Schedule A.
 
 3.4 **Payment processing.** Payment is processed by Polar (polar.sh),
 the merchant of record for the Subscription, which holds the Client's
-payment details. Payment details do not transit Operator
-infrastructure.
+payment details and issues the licence key. Payment details do not
+transit Operator infrastructure.
 
 3.5 **Tax.** Fees are exclusive of applicable Quebec sales tax (TVQ),
 federal goods and services tax (TPS/GST), and any other applicable
@@ -104,8 +108,8 @@ section 7 below.
 
 ### 5. Operator responsibilities
 
-5.1 The Operator will configure the Suite in accordance with its
-published security baseline and Documentation.
+5.1 The Operator maintains the published security baseline and
+Documentation that the Suite applies.
 
 5.2 The Client enters the credentials of its provider accounts in the
 Suite's administration panel, on its own server; the Operator holds
@@ -164,13 +168,14 @@ without further fee on the effective date of the change.
 
 ### 9. Term and termination
 
-9.1 **Initial term.** Six (6) months from the install-completion date
-for the recurring Subscription; the Installer Fee terminates on
-Operator delivery of the install plus any included support window.
+9.1 **Term.** The Subscription runs month to month from the date its
+licence key is activated and renews each month until cancelled. The
+Client may cancel at any time in Polar, effective at the end of the
+paid month.
 
-9.2 **Renewal.** The recurring Subscription renews month-to-month
-after the initial term; either Party may terminate on **thirty (30)
-days'** written notice.
+9.2 **Termination.** Beyond cancelling the Subscription in Polar,
+either Party may terminate this Agreement on **thirty (30) days'**
+written notice.
 
 9.3 **Termination for cause.** Either Party may terminate immediately
 on a material breach by the other that is not cured within thirty
