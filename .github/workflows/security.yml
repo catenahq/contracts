@@ -33,4 +33,4 @@ jobs:
       pull-requests: write
     with:
       profile: full
-      runner: ubuntu-latest
+      runner: ubuntu-26.04

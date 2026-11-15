@@ -172,7 +172,7 @@ upload does not fail the job.
 ```yaml
   same-tree:
     name: same tree (ci)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       actions: read
