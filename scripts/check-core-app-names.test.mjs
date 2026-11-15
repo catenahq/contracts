@@ -32,7 +32,7 @@ try {
   git("init", "-q");
   mkdirSync(join(work, ".github"));
   put("core/a.yml", "image: nextcloud\nname: Nextcloud\n");
-  put("core/b.yml", "image: traefik\nkeycloak postgres catena-admin cloudflared oauth2-proxy gatus healthchecks beszel\n");
+  put("core/b.yml", "image: traefik\nkeycloak postgres catena-admin cloudflared oauth2-proxy\n");
   put("outside/c.yml", "nextcloud\n");
 
   // A repo with no debt file is seeded by --update; paths outside the roots stay out.

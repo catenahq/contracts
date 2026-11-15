@@ -1,6 +1,7 @@
 {
   "apps": [
     "actualbudget",
+    "beszel",
     "catena-element",
     "catena-outline",
     "catena-plane",
@@ -16,6 +17,8 @@
     "erpnext",
     "espocrm",
     "frappe",
+    "gatus",
+    "healthchecks",
     "immich",
     "invoiceninja",
     "jicofo",
@@ -51,11 +54,8 @@
     "zammad"
   ],
   "structural": [
-    "beszel",
     "catena-admin",
     "cloudflared",
-    "gatus",
-    "healthchecks",
     "keycloak",
     "oauth2-proxy",
     "postgres",
