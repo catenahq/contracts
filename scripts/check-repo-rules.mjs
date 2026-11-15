@@ -101,6 +101,8 @@ const BRANCH_ALLOW = {
       "the release steps both release scripts share compare dev with main"],
     [/^automation\/operator-tools\/release_gate\.py$/,
       "the release gate proves the dev heads a release is made from"],
+    [/^automation\/operator-tools\/publish-scenario-catalogue\.py$/,
+      "the release publishes the catalogue of the scenarios on main"],
   ],
   website: [
     [/^\.github\/workflows\/deploy-pages\.yml$/,
