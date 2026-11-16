@@ -90,9 +90,6 @@ objectives following an S1 incident with confirmed data loss:
   install followed by a restore from its administration panel, as
   documented).
 
-Quarterly restore drills validate these objectives. The most recent
-drill date is recorded in the Operator's audit log.
-
 ## 6. Maintenance windows
 
 6.1 **Scheduled maintenance** is announced at least 48 hours in

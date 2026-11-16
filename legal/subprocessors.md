@@ -31,7 +31,7 @@ Operator's behalf:
 | 2 | OVHcloud              | Hosting of the Operator's servers: the CRM and helpdesk (ERPNext) and the central audit log copy | Canada (OVHcloud is based in France) | Client contact information, helpdesk tickets; administrator emails and source addresses in audit entries (subscribed Clients only) |
 | 3 | Resend, Inc.          | Outbound transactional email (Operator side) | USA | Operator-to-Client email metadata |
 | 4 | Sendinblue (Brevo) SAS | Outbound transactional email (Operator side) | EU | Operator-to-Client email metadata |
-| 5 | Anthropic             | Operator support tooling (LLM-assisted operations -- Operator-internal, no Client data shared) | Various | None (no Client PI sent) |
+| 5 | Anthropic             | Operator support tooling (LLM-assisted operations: Operator-internal, no Client data shared) | Various | None (no Client PI sent) |
 
 ## Subprocessor due diligence
 
