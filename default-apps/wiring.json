@@ -82,12 +82,13 @@
         "app": {
           "networks": {
             "catena-beszel": ["beszel-hub"],
-            "catena-beszelgate": ["beszel-hub"]
+            "catena-beszelgate": ["beszel-hub"],
+            "catena-alerts": []
           },
           "ports": [{ "published": 18190, "target": 8090 }]
         },
         "agent": { "host_network": true, "docker_socket": true },
-        "relay": { "networks": { "catena-alerts": [] } }
+        "relay": {}
       },
       "volumes": {
         "beszel-hub-data": "catena-beszel_beszel-hub-data",
