@@ -1,9 +1,10 @@
 {
   "reserved_capabilities": {
-    "healthchecks": { "provider": "healthchecks", "readers": ["gatus", "beszel"] },
+    "healthchecks": { "provider": "healthchecks", "readers": [] },
     "beszel": { "provider": "beszel", "readers": ["gatus"] },
     "beszelgate": { "provider": "beszel", "readers": [] }
   },
+  "alert_intake_sources": { "status": "gatus", "resources": "beszel" },
   "apps": {
     "gatus": {
       "stack": "catena-gatus",
@@ -11,7 +12,7 @@
         "app": {
           "networks": {
             "catena-network": ["gatus"],
-            "catena-healthchecks": [],
+            "catena-alerts": [],
             "catena-beszel": []
           },
           "ports": [{ "published": 18080, "target": 8080 }]
@@ -25,10 +26,10 @@
       "sqlite": [{ "volume": "gatus-data", "file": "gatus.db" }],
       "config_volume": "config",
       "env_core_writes": ["STATUS_HOST"],
-      "env_declared": ["SUBDOMAIN", "HC_URL", "HC_PING_KEY", "HUB_URL", "UI_TITLE", "UPDATE_LEVEL"],
-      "secrets": [],
+      "env_declared": ["SUBDOMAIN", "ALERT_URL", "ALERT_TOKEN", "HUB_URL", "UI_TITLE", "UPDATE_LEVEL"],
+      "secrets": ["alert_intake_token_status"],
       "provides": {},
-      "reads": ["healthchecks", "beszel"]
+      "reads": ["beszel"]
     },
     "healthchecks": {
       "stack": "catena-healthchecks",
@@ -86,7 +87,7 @@
           "ports": [{ "published": 18190, "target": 8090 }]
         },
         "agent": { "host_network": true, "docker_socket": true },
-        "relay": { "networks": { "catena-healthchecks": [] } }
+        "relay": { "networks": { "catena-alerts": [] } }
       },
       "volumes": {
         "beszel-hub-data": "catena-beszel_beszel-hub-data",
@@ -112,8 +113,8 @@
         "HUB_PASSWORD",
         "TOKEN",
         "STATE_KEY",
-        "HC_URL",
-        "HC_PING_KEY",
+        "ALERT_URL",
+        "ALERT_TOKEN",
         "HUB_OIDC_SECRET",
         "SMTP_PASSWORD",
         "SMTP_RELAY_HOST",
@@ -123,9 +124,9 @@
         "SMTP_RELAY_SENDER",
         "UPDATE_LEVEL"
       ],
-      "secrets": ["beszel_oidc_client_secret", "smtp_password"],
+      "secrets": ["alert_intake_token_resources", "beszel_oidc_client_secret", "smtp_password"],
       "provides": { "beszel": ["url"], "beszelgate": ["url"] },
-      "reads": ["healthchecks"]
+      "reads": []
     }
   }
 }

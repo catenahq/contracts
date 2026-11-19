@@ -16,6 +16,8 @@ Top level:
 
 - `reserved_capabilities`: capability -> `{provider, readers}`. `provider` is the app id that provides it, `readers` the
   app ids that may read it.
+- `alert_intake_sources`: intake source -> the app id whose block may read that source's token, the stored secret
+  `alert_intake_token_<source>` (`status` is read by Gatus, `resources` by Beszel). The read token is read by no app.
 - `apps`: app id -> the entry below.
 
 An app entry:
@@ -46,7 +48,8 @@ Each consumer's tests read this file as a sibling checkout:
 
 `node scripts/validate-json.mjs` checks the shape: every app has `stack` `catena-<id>`, every volume name is
 `<stack>_<key>`, every port pair is two integers, every `sqlite` volume is a volume key, and every provider and reader of
-a reserved capability is an app of the file and agrees with that app's `provides` and `reads`.
+a reserved capability is an app of the file and agrees with that app's `provides` and `reads`, and every app named in
+`alert_intake_sources` is an app of the file that lists the source's token in its `secrets`.
 
 A change needs every consumer's tests to pass in the same push window: put the change and the consumer changes on
 branches of the same name.

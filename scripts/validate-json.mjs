@@ -127,6 +127,12 @@ function validateWiringJson(file, data) {
       else if (!(apps[r].reads ?? []).includes(cap)) fail(file, `${cap}: ${r} does not read it`);
     }
   }
+  for (const [source, id] of Object.entries(data.alert_intake_sources ?? {})) {
+    if (!(id in apps)) fail(file, `alert_intake_sources.${source}: ${id} is not an app of the file`);
+    else if (!(apps[id].secrets ?? []).includes(`alert_intake_token_${source}`)) {
+      fail(file, `alert_intake_sources.${source}: ${id} does not list alert_intake_token_${source} in secrets`);
+    }
+  }
   if (failures === before) ok(file);
 }
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Default apps wiring",
   "type": "object",
-  "required": ["reserved_capabilities", "apps"],
+  "required": ["reserved_capabilities", "alert_intake_sources", "apps"],
   "additionalProperties": false,
   "properties": {
     "reserved_capabilities": {
@@ -16,6 +16,10 @@
           "readers": { "type": "array", "items": { "type": "string" } }
         }
       }
+    },
+    "alert_intake_sources": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
     },
     "apps": {
       "type": "object",
