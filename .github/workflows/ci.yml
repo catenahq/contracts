@@ -6,16 +6,16 @@ name: CI
 #   - JSON files match their documented shape (basic key presence
 #     + types; full schema validation is a follow-up)
 #
-# A push to a branch keeps the absolute gate. A pull request is judged on what
+# A push to the default branch keeps the absolute gate. A pull request is judged on what
 # it introduces: the validation steps and the duplication ratchet run through
 # this repo's new-failures-only action, which fails only on failures the base
 # commit does not have.
 
 on:
-  # Every pushed branch. Renovate, engine-bump and agent branches always carry
-  # a pull request, which tests each push to them.
+  # A change is checked once, on its pull request, Renovate's included. A push
+  # runs the checks only on the default branch.
   push:
-    branches-ignore: ['renovate/**', 'engine-bump/**', 'scanctl/**', 'agent/**', 'feature/auto-*']
+    branches: [main]
   pull_request:
 
 permissions:
