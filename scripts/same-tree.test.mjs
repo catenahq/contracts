@@ -186,6 +186,7 @@ if (text) console.log(text);
 );
 
 // git ls-remote --heads <url> refs/heads/<b> | git ls-remote --symref <url> HEAD
+// A branch's commit is state.shas["<repo>/<branch>"], else 40 c.
 writeFileSync(
   join(bin, "git"),
   `#!/usr/bin/env node
@@ -200,7 +201,7 @@ if (args[1] === "--symref") {
   console.log("ref: refs/heads/" + ((state.defaults || {})[repo] || "main") + "\\tHEAD");
 } else {
   const b = args[3].replace(/^refs\\/heads\\//, "");
-  if (((state.branches || {})[repo] || []).includes(b)) console.log("c".repeat(40) + "\\t" + args[3]);
+  if (((state.branches || {})[repo] || []).includes(b)) console.log(((state.shas || {})[repo + "/" + b] || "c".repeat(40)) + "\\t" + args[3]);
 }
 `,
 );
@@ -470,18 +471,13 @@ try {
   // No record: the checks run and the key is recorded.
   expectRun("no record", exec({}));
 
-  // A success is reused; a failure is carried with exit 1 to a run of its own
-  // event, on push and on pull_request.
+  // A success is reused, across events. A failure is never reused: the checks
+  // run, on push and on pull_request, from any source event.
   expectReuse("success", exec(source({ conclusion: "success" })), "success", 0);
-  let got = exec(source({ conclusion: "failure" }));
-  expectReuse("failure push", got, "failure", 1);
-  assert.ok(got.out.includes(`::error::same tree as ${URL}500, which failed`), got.out);
-  expectReuse("failure pr", exec(source({ conclusion: "failure", event: "pull_request" }), PR), "failure", 1, MERGE);
-
-  // A success carries across events; a failure does not: a push judges the
-  // absolute gate, a pull request only new failures.
   expectReuse("push pass to pr", exec(source({ conclusion: "success" }), PR), "success", 0, MERGE);
   expectReuse("pr pass to push", exec(source({ conclusion: "success", event: "pull_request" })), "success", 0);
+  expectRun("failure push", exec(source({ conclusion: "failure" })));
+  expectRun("failure pr", exec(source({ conclusion: "failure", event: "pull_request" }), PR));
   expectRun("push failure to pr", exec(source({ conclusion: "failure" }), PR));
   expectRun("pr failure to push", exec(source({ conclusion: "failure", event: "pull_request" })));
   expectRun("schedule failure to push", exec(source({ conclusion: "failure", event: "schedule" })));
@@ -503,7 +499,7 @@ try {
 
   // Newest first by created_at: the first qualifying entry wins, past ones
   // that do not count.
-  got = exec({
+  let got = exec({
     artifacts: { [REC]: artifacts(REC, [{ run: 501 }, { run: 502 }, { run: 500 }, { run: 503 }]) },
     runs: {
       501: run(501, { conclusion: "cancelled" }),
@@ -589,12 +585,15 @@ try {
   assert.equal(got.outputs.run, "true", `same tree, other base tree\n${got.out}`);
   assert.equal(got.outputs["upload-name"], REC_CHANGE, got.out);
 
-  // Siblings add the branch each one checks out, the default branch by name,
-  // looked up with the sibling token; the API calls use the other token.
+  // Siblings add the commit each one's checkout gets (the tip of the branch
+  // resolve.sh picks, else the default branch), looked up with the sibling
+  // token; the API calls use the other token.
+  const C = "c".repeat(40);
+  const F = "f".repeat(40);
   const sib = { branches: { "catenahq/contracts": ["main", "feature"], "catenahq/docs": ["main"] } };
   const twoSibs = { ST_SIBLINGS: "catenahq/docs\ncatenahq/contracts" };
   got = exec(sib, twoSibs);
-  const onMain = record([`tree=${T_HEAD}`, "catenahq/contracts=main", "catenahq/docs=main"]);
+  const onMain = record([`tree=${T_HEAD}`, `catenahq/contracts=${C}`, `catenahq/docs=${C}`]);
   assert.equal(got.outputs["upload-name"], onMain, got.out);
   const lines = got.calls.trim().split("\n");
   assert.ok(lines.some((l) => l.startsWith("git ")) && lines.some((l) => l.startsWith("gh ")), got.calls);
@@ -604,18 +603,34 @@ try {
   }
   got = exec(sib, { ...twoSibs, GITHUB_REF_NAME: "other" });
   assert.ok(got.calls.includes("--symref https://github.com/catenahq/docs.git HEAD [auth sibling-token]"), got.calls);
-  assert.equal(got.outputs["upload-name"], onMain, `default branch named\n${got.out}`);
-  got = exec(sib, { ...twoSibs, GITHUB_REF_NAME: "feature" });
+  assert.equal(got.outputs["upload-name"], onMain, `default branch commit\n${got.out}`);
+  const featureSib = { ...sib, shas: { "catenahq/contracts/feature": F } };
+  got = exec(featureSib, { ...twoSibs, GITHUB_REF_NAME: "feature" });
   assert.equal(
     got.outputs["upload-name"],
-    record([`tree=${T_HEAD}`, "catenahq/contracts=feature", "catenahq/docs=main"]),
+    record([`tree=${T_HEAD}`, `catenahq/contracts=${F}`, `catenahq/docs=${C}`]),
     got.out,
   );
-  got = exec(sib, { ...twoSibs, GITHUB_REF_NAME: "feature", ST_BRANCH: "main" });
+  got = exec(featureSib, { ...twoSibs, GITHUB_REF_NAME: "feature", ST_BRANCH: "main" });
   assert.equal(got.outputs["upload-name"], onMain, `branch input\n${got.out}`);
+  // Same tree and same sibling branch, another sibling commit: another key,
+  // so the success recorded under the first key is not reused.
+  const moved = { ...sib, shas: { "catenahq/contracts/main": F } };
+  got = exec(moved, twoSibs);
+  const onMoved = record([`tree=${T_HEAD}`, `catenahq/contracts=${F}`, `catenahq/docs=${C}`]);
+  assert.equal(got.outputs["upload-name"], onMoved, got.out);
+  assert.notEqual(onMoved, onMain);
+  got = exec({ ...moved, ...source({ conclusion: "success" }), artifacts: { [onMain]: artifacts(onMain, [{ run: 500 }]) } }, twoSibs);
+  assert.equal(got.outputs.run, "true", `sibling commit moved\n${got.out}`);
+  assert.equal(got.outputs["upload-name"], onMoved, got.out);
+  got = exec({ ...sib, ...source({ conclusion: "success" }), artifacts: { [onMain]: artifacts(onMain, [{ run: 500 }]) } }, twoSibs);
+  expectReuse("sibling commit same", got, "success", 0);
+  got = exec({ branches: { "catenahq/contracts": ["main"], "catenahq/docs": [] } }, twoSibs);
+  expectRun("sibling branch without commit", got, { upload: false, warning: true });
   expectRun("sibling error", exec({ gitFail: true }, twoSibs), { upload: false, warning: true });
 
-  // Several commits fill results, never fail the step and record nothing.
+  // Several commits fill results with the successes, never fail the step and
+  // record nothing.
   const REC_OTHER = record([`tree=${T_OTHER}`]);
   got = exec(
     {
@@ -629,7 +644,7 @@ try {
   );
   assert.equal(got.status, 0, got.out);
   assert.equal(got.outputs.run, "true");
-  assert.equal(got.outputs.results, `${HEAD} success ${URL}500\n${OTHER} failure ${URL}501`);
+  assert.equal(got.outputs.results, `${HEAD} success ${URL}500`);
   assert.equal(got.outputs["upload-name"], undefined);
   got = exec(source({ conclusion: "success" }), { ST_COMMITS: `${HEAD}\n${HEAD}` });
   assert.equal(got.outputs.run, "false", got.out);

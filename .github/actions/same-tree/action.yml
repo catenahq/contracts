@@ -2,8 +2,9 @@ name: same-tree
 description: >-
   On a push or a pull request, reuse the result of an earlier run of the same
   workflow that judged the same code: the tree, the base tree when the change
-  is judged, and the branch of each sibling repo. A reused failure fails the
-  step. With no result the checks run and the key is recorded for later runs.
+  is judged, and the commit of each sibling repo. Only a success is reused; a
+  failure never is. With no result the checks run and the key is recorded for
+  later runs.
 
 inputs:
   name:
@@ -21,7 +22,7 @@ inputs:
     description: true adds the base tree to the key (base default the first parent).
     default: 'false'
   siblings:
-    description: owner/name list; each one's branch, as checkout-sibling resolves it, joins the key.
+    description: owner/name list; the commit each one's checkout gets, on the branch checkout-sibling resolves, joins the key.
     default: ''
   branch:
     description: Passed to the sibling resolution in place of the run's branch (a tag push has none).
@@ -49,7 +50,7 @@ outputs:
     description: "'true' when the checks run, 'false' when a result is reused."
     value: ${{ steps.tree.outputs.run }}
   state:
-    description: The reused result, success or failure; empty when the checks run.
+    description: success when a result is reused; empty when the checks run.
     value: ${{ steps.tree.outputs.state }}
   source:
     description: The URL of the run whose result is reused.

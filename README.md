@@ -116,9 +116,9 @@ A first job runs it; every other job needs that job and runs only when its
 `run` output is not `false`.
 
 The key is `tree=<tree>`, then `base=<base tree>` with `judge-change`, then
-one `<owner/name>=<branch>` line per sibling, sorted, naming the branch
-`checkout-sibling/resolve.sh` picks (the default branch by name when it picks
-none). Trees and parents come from the commits API, so no checkout is needed.
+one `<owner/name>=<sha>` line per sibling, sorted, naming the commit at the
+tip of the branch `checkout-sibling/resolve.sh` picks (the default branch when
+it picks none), read with `git ls-remote`. Trees and parents come from the commits API, so no checkout is needed.
 A run that does its checks records the key as an artifact named
 `same-tree.<name>.<first 40 hex of sha256(key)>`, kept 30 days.
 
@@ -133,13 +133,11 @@ first, and takes the first whose run:
   run's head is the pull request's head, so it counts only when that head has
   the merge commit's tree, which is when the pull request is up to date with
   its base;
-- completed with `success`, or with `failure` from the same event as this run
-  (cancelled, skipped or timed out is not a result). A push judges the
-  absolute gate and a pull request only new failures, so a failure never
-  crosses between them; a success carries both ways.
+- completed with `success` (a failure, cancelled, skipped or timed out run is
+  not a result, so a failure is never reused). A success carries between a push
+  and a pull request.
 
-A found success sets `run` to `false`. A found failure does too, and fails the
-step, so the gate job turns red. Either prints
+A found success sets `run` to `false`, prints
 `::notice::same tree as <url> (<state>): nothing ran` and writes the job
 summary. A source still going is waited for, polled every 30 seconds, up to
 `wait-minutes`; with no record yet, so is a push run of the checked commit and,
@@ -154,7 +152,7 @@ upload does not fail the job.
 | `workflow` | The file the source must have run. Default the caller's. |
 | `commits` | Lines of `<sha> [<base sha>]`. Default `github.sha` (the merge commit on a pull request). With several, `results` lists those with a result, the step never fails and nothing is recorded. |
 | `judge-change` | `true` adds the base tree to the key: the line's base, else the first parent. |
-| `siblings` | owner/name list: every repository the workflow checks out with checkout-sibling. |
+| `siblings` | owner/name list: every repository the workflow checks out with checkout-sibling; the commit each checkout gets joins the key. |
 | `branch` | Passed to the sibling resolution in place of the run's branch (a tag push has none). |
 | `source-events` | Events a source run may have. Default `push pull_request schedule`. |
 | `wait-minutes` | Default 30 on a `pull_request`, 0 on other events, so a push never waits. |
@@ -165,7 +163,7 @@ upload does not fail the job.
 | Output | Meaning |
 | --- | --- |
 | `run` | `true` when the checks run, `false` when a result is reused. |
-| `state` | `success` or `failure` when reused, else empty. |
+| `state` | `success` when reused, else empty. |
 | `source` | The URL of the reused run. |
 | `results` | Lines of `<sha> <state> <url>`, one per commit with a result. |
 

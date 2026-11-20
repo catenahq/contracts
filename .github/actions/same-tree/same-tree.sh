@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Looks for an earlier run of the same workflow that judged the same key: the
-# commit's tree, the base tree with ST_JUDGE_CHANGE, and the branch of each
+# commit's tree, the base tree with ST_JUDGE_CHANGE, and the commit of each
 # sibling repo the run checks out. A run that recorded the key, of this
 # repository and the same workflow file, with an event in ST_SOURCE_EVENTS,
 # whose head commit has the key's tree (and with ST_JUDGE_CHANGE a first parent
-# with the key's base tree), and that concluded success or failure, is the
-# source; its conclusion is reused. Only push and pull_request runs reuse. Any
-# API error means no result: the checks run.
+# with the key's base tree), and that concluded success, is the source; its
+# success is reused. A failure is never reused. Only push and pull_request runs
+# reuse. Any API error means no result: the checks run.
 #
 # Input (environment):
 #   ST_NAME           record name; default the calling workflow file's stem
@@ -14,7 +14,8 @@
 #   ST_COMMITS        lines of "<sha> [<base sha>]"; default GITHUB_SHA
 #   ST_JUDGE_CHANGE   true: the base tree joins the key (base: the line's
 #                     second field, else the first parent)
-#   ST_SIBLINGS       owner/name list; each one's branch joins the key
+#   ST_SIBLINGS       owner/name list; the commit each one's checkout gets joins
+#                     the key
 #   ST_BRANCH         passed to checkout-sibling/resolve.sh
 #   ST_DEFAULT_BRANCH the run's default branch, passed to resolve.sh
 #   ST_SOURCE_EVENTS  events a source run may have
@@ -125,8 +126,8 @@ commit_info() {
   PARENT="${PARENT_OF[$1]}"
 }
 
-# Prints the default branch of sibling $1.
-default_branch() {
+# Runs git with the sibling token as the GitHub authorization header.
+sibling_git() {
   (
     if [ -n "${ST_SIBLING_TOKEN:-}" ]; then
       auth="$(printf 'x-access-token:%s' "$ST_SIBLING_TOKEN" | base64 -w0)"
@@ -134,22 +135,39 @@ default_branch() {
       export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
       export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
     fi
-    git ls-remote --symref "https://github.com/$1.git" HEAD
-  ) | sed -n 's|^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$|\1|p'
+    git "$@"
+  )
 }
 
-# The sibling lines of the key, the same for every commit. The default branch
-# is named, so a run that falls back to it and a run that asks for it by name
-# share the key.
+# Prints the default branch of sibling $1.
+default_branch() {
+  sibling_git ls-remote --symref "https://github.com/$1.git" HEAD |
+    sed -n 's|^ref: refs/heads/\([^[:space:]]*\)[[:space:]]*HEAD$|\1|p'
+}
+
+# Prints the commit at the tip of branch $2 of sibling $1; returns 1 when the
+# branch has no commit.
+branch_sha() {
+  local out sha
+  out="$(sibling_git ls-remote --heads "https://github.com/$1.git" "refs/heads/$2")" || return 1
+  read -r sha _ <<< "$out"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s\n' "$sha"
+}
+
+# The sibling lines of the key, the same for every commit: each sibling with
+# the commit its checkout gets, the tip of the branch checkout-sibling picks
+# (the default branch when it picks none).
 sibling_lines() {
-  local s ref
+  local s ref sha
   for s in "${SIBLINGS[@]}"; do
     ref="$(REPOSITORY="$s" TOKEN="${ST_SIBLING_TOKEN:-}" BRANCH="${ST_BRANCH:-}" EVENT="$EVENT" \
       HEAD_REF="${GITHUB_HEAD_REF:-}" BASE_REF="${GITHUB_BASE_REF:-}" \
       REF_NAME="${GITHUB_REF_NAME:-}" REF_TYPE="${GITHUB_REF_TYPE:-}" DEFAULT_BRANCH="${ST_DEFAULT_BRANCH:-}" bash "$RESOLVE")" || return 1
     [ -n "$ref" ] || ref="$(default_branch "$s")"
     [ -n "$ref" ] || return 1
-    printf '%s=%s\n' "$s" "$ref"
+    sha="$(branch_sha "$s" "$ref")" || return 1
+    printf '%s=%s\n' "$s" "$sha"
   done
 }
 
@@ -176,7 +194,7 @@ key_of() {
 }
 
 # Newest first, the first record entry whose run qualifies and concluded
-# success or failure sets FOUND_STATE and FOUND_URL. PENDING=1 when a
+# success sets FOUND_STATE and FOUND_URL. PENDING=1 when a
 # qualifying run is still going. Any run of this repository can upload an
 # artifact of any name, so a record counts only when the run's own head commit
 # has the key's tree (and first-parent tree with ST_JUDGE_CHANGE): a
@@ -210,13 +228,9 @@ lookup() {
       PENDING=1
       continue
     fi
-    # A push judges the absolute gate and a pull request only new failures, so
-    # a failure carries only to a run of its own event; a success to any.
-    case "$concl" in
-      success) ;;
-      failure) [ "$ev" = "$EVENT" ] || continue ;;
-      *) continue ;;
-    esac
+    # Only a success is reused: a failure can come from state the key does not
+    # hold, so the checks run again.
+    [ "$concl" = success ] || continue
     FOUND_STATE="$concl"
     FOUND_URL="$url"
     return 0
@@ -282,7 +296,7 @@ SIB_LINES=""
 sib_ok=1
 if ! SIB_LINES="$(sibling_lines)"; then
   sib_ok=0
-  warn "cannot resolve the sibling branches; the checks run"
+  warn "cannot resolve the sibling commits; the checks run"
 fi
 [ -z "$SIB_LINES" ] || SIB_LINES+=$'\n'
 
@@ -330,10 +344,6 @@ if [ "$looked" -eq 1 ] && [ -n "${FOUND_STATE:-}" ]; then
   out source "$FOUND_URL"
   out results "$sha $FOUND_STATE $FOUND_URL"
   reused "$FOUND_STATE" "$FOUND_URL"
-  if [ "$FOUND_STATE" = failure ]; then
-    echo "::error::same tree as $FOUND_URL, which failed: its failure is carried"
-    exit 1
-  fi
   exit 0
 fi
 
