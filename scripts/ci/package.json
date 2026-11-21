@@ -1,0 +1,9 @@
+{
+  "name": "@catenahq/ci-checks-matrix",
+  "private": true,
+  "description": "The matrix parser of the shared PR workflow (.github/workflows/pr.yml).",
+  "type": "module",
+  "dependencies": {
+    "yaml": "2.9.1"
+  }
+}

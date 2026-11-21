@@ -1,0 +1,240 @@
+name: pr
+
+# The shared pull request workflow of the catenahq repositories. A caller's
+# ci.yml holds the triggers and calls this file with its runner label; its
+# .github/checks.yml names the checks (README.md, "Shared PR workflow").
+#
+# plan reads checks.yml as data into a matrix and reuses an earlier success of
+# the same tree; check runs each entry with bash ci/run <name>, or the
+# contracts gates for the entry named gates; gate is the one status a branch
+# rule requires. The CI code comes from this repository at the commit the
+# caller pins (job.workflow_sha), checked out under .catena-ci: a "./" action
+# resolves against the caller's workspace. The gate scripts and every other
+# sibling come from the caller's .github/catenahq.lock.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label of plan, gate and every check that names no runs-on.
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  plan:
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      actions: read # same-tree reads the runs and artifacts of the caller
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      run: ${{ steps.tree.outputs.run }}
+    steps:
+      - name: Check out the caller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          path: ws/${{ github.event.repository.name }}
+          persist-credentials: false
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26"
+      - name: Install the matrix parser
+        run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      - name: Matrix
+        id: matrix
+        working-directory: ws/${{ github.event.repository.name }}
+        env:
+          RUNNER_LABEL: ${{ inputs.runner }}
+        # The siblings of every entry join the same-tree key.
+        run: |
+          matrix="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --runner "$RUNNER_LABEL")"
+          echo "$matrix" | jq .
+          siblings="$(jq -r '[.include[].sib | to_entries[] | select(.value != "") | "catenahq/" + .key] | unique | join(" ")' <<< "$matrix")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "siblings=$siblings" >> "$GITHUB_OUTPUT"
+      - name: Same tree
+        id: tree
+        uses: ./.catena-ci/.github/actions/same-tree
+        with:
+          siblings: ${{ steps.matrix.outputs.siblings }}
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          wait-minutes: '0'
+
+  check:
+    name: check (${{ matrix.name }})
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: ${{ matrix.timeout }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    defaults:
+      run:
+        working-directory: ws/${{ github.event.repository.name }}
+    steps:
+      - name: Check out the caller
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          path: ws/${{ github.event.repository.name }}
+          persist-credentials: false
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      # One step per sibling the matrix parser knows (SIBLINGS in
+      # scripts/ci/checks-matrix.mjs), each at the caller's lock.
+      - name: Check out sibling catena-admin
+        if: matrix.sib.catena-admin != ''
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-admin
+          path: ws/catena-admin
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          fetch-depth: ${{ matrix.sib.catena-admin }}
+      - name: Check out sibling catena-ce
+        if: matrix.sib.catena-ce != ''
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-ce
+          path: ws/catena-ce
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          fetch-depth: ${{ matrix.sib.catena-ce }}
+      - name: Check out sibling catena-templates
+        if: matrix.sib.catena-templates != ''
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-templates
+          path: ws/catena-templates
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          fetch-depth: ${{ matrix.sib.catena-templates }}
+      - name: Check out sibling contracts
+        if: matrix.sib.contracts != ''
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/contracts
+          path: ws/contracts
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          fetch-depth: ${{ matrix.sib.contracts }}
+      - name: Check out sibling docs
+        if: matrix.sib.docs != ''
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/docs
+          path: ws/docs
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          fetch-depth: ${{ matrix.sib.docs }}
+      - name: Check out sibling ops
+        if: matrix.sib.ops != ''
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/ops
+          path: ws/ops
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          fetch-depth: ${{ matrix.sib.ops }}
+      - if: matrix.tools.node != ''
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ matrix.tools.node }}
+      - if: matrix.tools.uv != ''
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ matrix.tools.uv }}
+          enable-cache: false
+      - if: matrix.tools.go != ''
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ matrix.tools.go != 'go.mod' && matrix.tools.go || '' }}
+          go-version-file: ${{ matrix.tools.go == 'go.mod' && format('ws/{0}/go.mod', github.event.repository.name) || '' }}
+          cache: false
+      - name: Install staticcheck
+        if: matrix.tools.staticcheck != ''
+        working-directory: ${{ runner.temp }}
+        env:
+          VERSION: ${{ matrix.tools.staticcheck }}
+          SHA256: ${{ matrix.tools.staticcheck-sha256 }}
+        run: |
+          curl -fsSLo staticcheck.tar.gz "https://github.com/dominikh/go-tools/releases/download/${VERSION}/staticcheck_linux_amd64.tar.gz"
+          echo "$SHA256  staticcheck.tar.gz" | sha256sum -c -
+          tar -xzf staticcheck.tar.gz
+          echo "$RUNNER_TEMP/staticcheck" >> "$GITHUB_PATH"
+      # Pinned in contracts/.vale-version, which check-prose.mjs also reads and
+      # enforces: the grammars decide which comments are visible.
+      - name: Install vale
+        if: matrix.name == 'gates'
+        working-directory: ${{ github.workspace }}
+        run: |
+          version="$(cat ws/contracts/.vale-version)"
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${version}/vale_${version}_Linux_64-bit.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/bin" vale
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Contracts gates
+        # Every gate runs and prints its findings; any failure fails the step.
+        if: matrix.name == 'gates'
+        env:
+          APP_NAMES: ${{ toJSON(matrix.gates.core-app-names) }}
+          DUPLICATION: ${{ matrix.gates.duplication }}
+        run: |
+          status=0
+          node ../contracts/scripts/check-unicode.mjs || status=1
+          node ../contracts/scripts/check-repo-rules.mjs || status=1
+          node ../contracts/scripts/check-prose.mjs || status=1
+          mapfile -t args < <(jq -r '.[]' <<< "$APP_NAMES")
+          if [ "${#args[@]}" -gt 0 ]; then
+            node ../contracts/scripts/check-core-app-names.mjs "${args[@]}" || status=1
+          fi
+          if [ "$DUPLICATION" = true ]; then
+            npx --yes jscpd@4.3.0 --silent || status=1
+          fi
+          exit "$status"
+      - name: bash ci/run ${{ matrix.name }}
+        if: matrix.name != 'gates'
+        env:
+          CHECK: ${{ matrix.name }}
+        run: bash ci/run "$CHECK"
+
+  gate:
+    # The required status: a draft, a plan that did not succeed, or a check
+    # that ended other than success or skipped fails it. A reused result skips
+    # every check and passes.
+    needs: [plan, check]
+    if: ${{ !cancelled() }}
+    runs-on: ${{ inputs.runner }}
+    permissions: {}
+    steps:
+      - name: Gate
+        env:
+          DRAFT: ${{ github.event.pull_request.draft }}
+          PLAN: ${{ needs.plan.result }}
+          CHECK: ${{ needs.check.result }}
+        run: |
+          if [ "$DRAFT" = true ]; then
+            echo "::error::a draft pull request does not pass the gate; mark it ready for review"
+            exit 1
+          fi
+          if [ "$PLAN" != success ]; then
+            echo "::error::plan: $PLAN"
+            exit 1
+          fi
+          case "$CHECK" in
+            success | skipped) echo "plan: $PLAN; checks: $CHECK" ;;
+            *)
+              echo "::error::checks: $CHECK"
+              exit 1
+              ;;
+          esac

@@ -42,9 +42,10 @@ CI checks this repo out with `.github/actions/checkout-sibling`, which
 every workflow uses for every cross-repo checkout: no workflow resolves
 a sibling's branch on its own. A `uses:` line is read before expressions
 are evaluated, so first-party actions and reusable workflows are named
-`@main`; that is the only branch name a workflow holds outside its
-`on:` triggers and run conditions, unless it is a release channel listed
-in `BRANCH_ALLOW` (`scripts/check-repo-rules.mjs`).
+`@main`, except `pr.yml`, which a caller pins by commit; that is the only
+branch name a workflow holds outside its `on:` triggers and run conditions,
+unless it is a release channel listed in `BRANCH_ALLOW`
+(`scripts/check-repo-rules.mjs`).
 
 | Path | What it is |
 | --- | --- |
@@ -57,6 +58,8 @@ in `BRANCH_ALLOW` (`scripts/check-repo-rules.mjs`).
 | `.github/actions/new-failures-only/` | Runs a gate command: with no base commit it keeps the absolute gate; with one (the `base` input, else a pull request's merge commit first parent, else the event's base) it fails only on failure lines that commit lacks (README.md, "Changes fail only on new failures"). |
 | `.github/actions/same-tree/` | On a push or pull request, reuses the success of an earlier run of the same workflow that judged the same tree and sibling commits, and records the key when the checks run (README.md, "Runs once per tree"). |
 | `.github/actions/image-pin-pr/` | Moves the pin of an app's own image to a version in the named files of a templates repository, pushes the branch `image-pin/<app>`, and opens the pull request or updates the open one; a repository that already pins the version gets none. |
+| `.github/workflows/pr.yml` | The shared PR workflow a caller's `ci.yml` calls: `plan` turns the caller's `.github/checks.yml` into a matrix and runs same-tree, `check (<name>)` runs `bash ci/run <name>` or the contracts gates, `gate` is the required status. It loads its own code at `job.workflow_sha`, never `@main` or a `./` path into the caller (README.md, "Shared PR workflow"). |
+| `scripts/ci/checks-matrix.mjs` | The matrix parser `plan` runs. A key it does not know fails, named. npm `yaml` is locked in `scripts/ci/package-lock.json`; a sibling or tool `pr.yml` gains is added to both. |
 | `scripts/sync-brand-assets.mjs` | Copies the logo into the consuming site's `public/favicon.svg`. Each site's `postinstall`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
 | `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |

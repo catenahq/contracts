@@ -217,6 +217,90 @@ drives `same-tree.sh` and `resolve.sh` with stubs for `gh`, `git`, `date` and
 projections with a small evaluator of the jq they use, which the test checks
 against payloads and outputs recorded from `gh api`.
 
+## Shared PR workflow
+
+`.github/workflows/pr.yml` is the reusable workflow a repository's CI calls. The
+caller's `ci.yml` holds the triggers and the permissions, and pins a contracts
+commit:
+
+```yaml
+name: ci
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions: {}
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ci:
+    uses: catenahq/contracts/.github/workflows/pr.yml@<40-hex sha> # <branch>
+    permissions: {contents: read, actions: read}
+    with: {runner: catena-ci}
+```
+
+The input `runner` is the label of `plan`, `gate` and every check that names
+no `runs-on`. Three jobs run:
+
+- `plan` checks the caller out under `ws/<repo>` and contracts at
+  `job.workflow_sha` (the commit the caller pins) under `.catena-ci/`, then
+  turns the caller's `.github/checks.yml` into a matrix with
+  `scripts/ci/checks-matrix.mjs` and runs same-tree (`wait-minutes: 0`) with
+  every sibling the matrix names and the caller's lock. A reused success sets
+  `run` to `false`.
+- `check (<name>)`, one per matrix entry, when `run` is `true`: the caller and
+  `.catena-ci/` again, each sibling the entry names through checkout-sibling at
+  the caller's lock, the entry's tools, then `bash ci/run <name>` in
+  `ws/<repo>`. The entry `gates` runs the contracts gates of the locked
+  contracts checkout instead: unicode, repo rules and whole-tree prose always,
+  the core-app-name gate with its arguments, jscpd 4.3.0 with `duplication`.
+- `gate` is the status a branch rule requires. It runs unless the run is
+  cancelled and fails on a draft pull request, on a `plan` that did not
+  succeed, or on a `check` result other than success or skipped.
+
+`.github/checks.yml` is data; the parser fails on any key it does not know and
+names it:
+
+```yaml
+gates:                       # the contracts gates, as the check named gates
+  core-app-names: [--exclude, central/, .]   # the script's arguments
+  duplication: true
+checks:
+  go:                        # bash ci/run go
+    runs-on: catena-ci       # default: the runner input
+    timeout-minutes: 40      # default 20
+    tools: {go: go.mod}      # node, uv: exact; go: go.mod or exact; staticcheck: {version, sha256}
+    siblings: {catena-ce: {fetch-depth: 0}, contracts: {}}
+    inputs: [.]              # git pathspecs the check reads
+    go-cache: true
+```
+
+A sibling is one of `catena-admin`, `catena-ce`, `catena-templates`,
+`contracts`, `docs` and `ops`, and needs a line in the caller's lock; `gates`
+needs the contracts line. A sibling's `token` must name a secret `pr.yml`
+declares in `on.workflow_call.secrets`, and it declares none. No check may be
+named `gates`.
+
+The matrix is one line of JSON. Each entry carries every tool, sibling and gate
+key; a sibling's value is its fetch depth, or empty when the check does not use
+it:
+
+```json
+{"include":[{"name":"go","runs-on":"catena-ci","timeout":40,"go-cache":true,
+  "tools":{"node":"","uv":"","go":"go.mod","staticcheck":"","staticcheck-sha256":""},
+  "sib":{"catena-admin":"","catena-ce":"0","catena-templates":"","contracts":"1","docs":"","ops":""},
+  "gates":{"core-app-names":[],"duplication":false}}]}
+```
+
+Run the parser from a caller's checkout to see its matrix:
+
+    node ../contracts/scripts/ci/checks-matrix.mjs --runner catena-ci
+
+It needs `npm ci --prefix scripts/ci` once (npm `yaml`, locked in
+`scripts/ci/`, outside the package consumers link).
+`scripts/ci/checks-matrix.test.mjs` runs it over the checks of ci-runner,
+catena-admin and ops and each key it refuses.
+
 ## How to change a contract
 
 1. Update the artifact (e.g. `pricing/tiers.json`) and run this repo's
