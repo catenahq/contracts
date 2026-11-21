@@ -17,7 +17,11 @@
 #   ST_SIBLINGS       owner/name list; the commit each one's checkout gets joins
 #                     the key
 #   ST_BRANCH         passed to checkout-sibling/resolve.sh
-#   ST_LOCK ST_TIP    passed to resolve.sh as LOCK and TIP
+#   ST_LOCK           the lock file passed to resolve.sh as LOCK; when empty and
+#                     the workspace holds no .github/catenahq.lock, the lock at
+#                     each judged commit is read through the API (a 404 is no
+#                     lock, any other failure fails the step)
+#   ST_TIP            passed to resolve.sh as TIP
 #   ST_DEFAULT_BRANCH the run's default branch, passed to resolve.sh
 #   ST_SOURCE_EVENTS  events a source run may have
 #   ST_WAIT_MINUTES   how long to wait for a source still going; default 30
@@ -111,7 +115,7 @@ while read -r sha base _; do
 done <<< "$COMMITS"
 [ "${#SHAS[@]}" -gt 0 ] || fail "no commit to judge"
 
-declare -A TREE_OF PARENT_OF
+declare -A TREE_OF PARENT_OF LOCK_OF LINES_OF
 
 # Sets TREE and PARENT ("none" for a root commit) of commit $1.
 commit_info() {
@@ -156,14 +160,41 @@ branch_sha() {
   printf '%s\n' "$sha"
 }
 
-# The sibling lines of the key, the same for every commit: each sibling with
-# the commit its checkout gets: the commit checkout-sibling picks from the
-# lock, else the tip of the branch it picks (the default branch when it picks
-# none).
+# Sets LOCK_PATH to the lock file the checkout of commit $1 reads: the ST_LOCK
+# file, else .github/catenahq.lock under the workspace when it exists, else the
+# lock at commit $1 of this repository, fetched into a temporary file. Empty
+# when there is no lock (a 404) or ST_TIP is true. Any other API failure fails
+# the step.
+lock_of() {
+  local file err
+  LOCK_PATH="${ST_LOCK:-}"
+  [ -z "$LOCK_PATH" ] || return 0
+  [ "${ST_TIP:-false}" != true ] || return 0
+  if [ -f "${GITHUB_WORKSPACE:-.}/.github/catenahq.lock" ]; then
+    LOCK_PATH="${GITHUB_WORKSPACE:-.}/.github/catenahq.lock"
+    return 0
+  fi
+  if [ -z "${LOCK_OF[$1]+x}" ]; then
+    file="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/same-tree-lock.XXXXXX")"
+    if err="$(gh api "repos/$REPO/contents/.github/catenahq.lock?ref=$1" -H 'Accept: application/vnd.github.raw' < /dev/null 2>&1 > "$file")"; then
+      LOCK_OF[$1]="$file"
+    elif [[ "$err" == *"HTTP 404"* ]]; then
+      LOCK_OF[$1]=""
+    else
+      fail "cannot read .github/catenahq.lock at $1: $err"
+    fi
+  fi
+  LOCK_PATH="${LOCK_OF[$1]}"
+}
+
+# The sibling lines of the key for the lock file $1 (empty: no lock): each
+# sibling with the commit its checkout gets: the commit checkout-sibling picks
+# from the lock, else the tip of the branch it picks (the default branch when it
+# picks none).
 sibling_lines() {
   local s ref sha
   for s in "${SIBLINGS[@]}"; do
-    ref="$(REPOSITORY="$s" TOKEN="${ST_SIBLING_TOKEN:-}" BRANCH="${ST_BRANCH:-}" LOCK="${ST_LOCK:-}" TIP="${ST_TIP:-}" EVENT="$EVENT" \
+    ref="$(REPOSITORY="$s" TOKEN="${ST_SIBLING_TOKEN:-}" BRANCH="${ST_BRANCH:-}" LOCK="$1" TIP="${ST_TIP:-}" EVENT="$EVENT" \
       HEAD_REF="${GITHUB_HEAD_REF:-}" BASE_REF="${GITHUB_BASE_REF:-}" \
       REF_NAME="${GITHUB_REF_NAME:-}" REF_TYPE="${GITHUB_REF_TYPE:-}" DEFAULT_BRANCH="${ST_DEFAULT_BRANCH:-}" bash "$RESOLVE")" || return 1
     [ -n "$ref" ] || ref="$(default_branch "$s")"
@@ -177,6 +208,19 @@ sibling_lines() {
   done
 }
 
+# Sets SIB_LINES for commit $1, from the lock that commit's checkout reads.
+sib_lines_of() {
+  local lines
+  SIB_LINES=""
+  [ "${#SIBLINGS[@]}" -gt 0 ] || return 0
+  lock_of "$1"
+  if [ -z "${LINES_OF[lock:$LOCK_PATH]+x}" ]; then
+    lines="$(sibling_lines "$LOCK_PATH")" || return 1
+    LINES_OF["lock:$LOCK_PATH"]="$lines"$'\n'
+  fi
+  SIB_LINES="${LINES_OF[lock:$LOCK_PATH]}"
+}
+
 # Sets KEY, RECORD, KEY_TREE and KEY_BASE_TREE for commit $1 judged from base
 # $2; KEY and RECORD stay empty on an error.
 key_of() {
@@ -185,6 +229,7 @@ key_of() {
   RECORD=""
   KEY_BASE_TREE=""
   commit_info "$1" || return 1
+  sib_lines_of "$1" || return 1
   KEY_TREE="$TREE"
   key="tree=$TREE"$'\n'
   if [ "${ST_JUDGE_CHANGE:-false}" = true ]; then
@@ -298,14 +343,6 @@ reused() {
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf 'Same tree as [%s](%s) (%s): nothing ran.\n' "$2" "$2" "$1" >> "$GITHUB_STEP_SUMMARY"
 }
 
-SIB_LINES=""
-sib_ok=1
-if ! SIB_LINES="$(sibling_lines)"; then
-  sib_ok=0
-  warn "cannot resolve the sibling commits; the checks run"
-fi
-[ -z "$SIB_LINES" ] || SIB_LINES+=$'\n'
-
 # Only on a push or a pull_request is GITHUB_SHA the code the run judges;
 # every other event runs its checks.
 reuse=0
@@ -317,7 +354,7 @@ if [ "${#SHAS[@]}" -gt 1 ]; then
   for i in "${!SHAS[@]}"; do
     sha="${SHAS[$i]}"
     FOUND_STATE=""
-    if [ "$reuse" -eq 1 ] && [ "$sib_ok" -eq 1 ] && ! judge "$sha" "${BASES[$i]}"; then
+    if [ "$reuse" -eq 1 ] && ! judge "$sha" "${BASES[$i]}"; then
       warn "a GitHub API call failed for $sha; it runs"
     fi
     if [ -n "$FOUND_STATE" ]; then
@@ -337,7 +374,7 @@ fi
 sha="${SHAS[0]}"
 KEY=""
 looked=1
-if [ "$reuse" -eq 1 ] && [ "$sib_ok" -eq 1 ]; then
+if [ "$reuse" -eq 1 ]; then
   if ! judge "$sha" "${BASES[0]}"; then
     looked=0
     warn "a GitHub API call failed; the checks run"
@@ -357,7 +394,7 @@ out run true
 out state ""
 out source ""
 out results ""
-if [ "${ST_RECORD:-true}" = true ] && [ "$sib_ok" -eq 1 ] && in_list "$EVENT" push pull_request schedule; then
+if [ "${ST_RECORD:-true}" = true ] && in_list "$EVENT" push pull_request schedule; then
   if [ -z "$KEY" ] && ! key_of "$sha" "${BASES[0]}"; then
     warn "cannot compute the key; no record"
     exit 0

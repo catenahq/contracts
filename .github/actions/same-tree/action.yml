@@ -28,7 +28,10 @@ inputs:
     description: Passed to the sibling resolution in place of the run's branch (a tag push has none).
     default: ''
   lock:
-    description: The lock file checkout-sibling reads (its lock input).
+    description: >-
+      The lock file checkout-sibling reads (its lock input). Empty: the file
+      under the workspace when it exists, else the lock of this repository at
+      each judged commit, read through the API.
     default: ''
   tip:
     description: Passed to the sibling resolution (checkout-sibling's tip input).
@@ -45,7 +48,7 @@ inputs:
     description: true records the key when a single commit runs on a push, pull_request or schedule.
     default: 'true'
   token:
-    description: Reads this repository's runs, artifacts and commits.
+    description: Reads this repository's runs, artifacts, commits and lock.
     default: ${{ github.token }}
   sibling-token:
     description: Reads the siblings' branches (a private sibling needs more than the default).
