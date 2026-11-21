@@ -27,6 +27,12 @@ inputs:
   branch:
     description: Passed to the sibling resolution in place of the run's branch (a tag push has none).
     default: ''
+  lock:
+    description: The lock file checkout-sibling reads (its lock input).
+    default: ''
+  tip:
+    description: Passed to the sibling resolution (checkout-sibling's tip input).
+    default: 'false'
   source-events:
     description: Events a source run may have.
     default: push pull_request schedule
@@ -71,6 +77,8 @@ runs:
         ST_JUDGE_CHANGE: ${{ inputs.judge-change }}
         ST_SIBLINGS: ${{ inputs.siblings }}
         ST_BRANCH: ${{ inputs.branch }}
+        ST_LOCK: ${{ inputs.lock }}
+        ST_TIP: ${{ inputs.tip }}
         ST_SOURCE_EVENTS: ${{ inputs.source-events }}
         ST_WAIT_MINUTES: ${{ inputs.wait-minutes }}
         ST_RECORD: ${{ inputs.record }}

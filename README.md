@@ -34,10 +34,32 @@ its `package.json`:
 npm symlinks `node_modules/@catenahq/contracts` to the sibling
 checkout, so an edit here is visible on the consumer's next dev/build.
 CI mirrors the layout: each consumer's workflow checks this repo out
-alongside itself with `.github/actions/checkout-sibling`, at the branch
-the consumer runs on when this repo has it and a bot did not name it,
-else at the default branch. A run on its own repository's default branch
-takes the default branch here too.
+alongside itself with `.github/actions/checkout-sibling`.
+
+A consumer pins each sibling in its own `.github/catenahq.lock`, one line per
+sibling, so a push to a sibling changes no open pull request's result there:
+
+```
+catenahq/<repo> <40-hex sha> # <branch the sha was read from>
+```
+
+Blank lines and lines starting with `#` are ignored. With the lock,
+checkout-sibling takes the sibling's branch of the same name as the run's
+branch when the sibling has it and a bot did not name it (`renovate/`,
+`engine-bump/`, `scanctl/`, `merge-back/`), else the pinned commit; the base
+branch and the default branch do not apply. A lock without a line for the
+requested sibling, or with a malformed line, fails the step. The `lock`
+input names the file when it is not `.github/catenahq.lock` under the
+workspace root (a consumer checked out under `ws/<repo>` passes
+`ws/<repo>/.github/catenahq.lock`). The input `tip: 'true'` takes the
+sibling's default branch and ignores the lock. The `ref` output is the
+branch or the commit checked out.
+
+With no lock file the checkout is at the branch the consumer runs on when
+this repo has it and a bot did not name it, else on a pull request at the
+base branch, else at the default branch. A run on its own repository's
+default branch takes the default branch here too.
+
 The scripts under `scripts/` (unicode, prose, repo-rule and core-app-name
 gates, and the brand-asset sync each site runs on install) run from that
 checkout the same way. The repo-rule gate refuses a tracked env file, a
@@ -117,8 +139,9 @@ A first job runs it; every other job needs that job and runs only when its
 
 The key is `tree=<tree>`, then `base=<base tree>` with `judge-change`, then
 one `<owner/name>=<sha>` line per sibling, sorted, naming the commit at the
-tip of the branch `checkout-sibling/resolve.sh` picks (the default branch when
-it picks none), read with `git ls-remote`. Trees and parents come from the commits API, so no checkout is needed.
+commit `checkout-sibling/resolve.sh` picks from the lock, else the tip of the
+branch it picks (the default branch when it picks none), read with
+`git ls-remote`. Trees and parents come from the commits API, so no checkout is needed.
 A run that does its checks records the key as an artifact named
 `same-tree.<name>.<first 40 hex of sha256(key)>`, kept 30 days.
 
@@ -154,6 +177,8 @@ upload does not fail the job.
 | `judge-change` | `true` adds the base tree to the key: the line's base, else the first parent. |
 | `siblings` | owner/name list: every repository the workflow checks out with checkout-sibling; the commit each checkout gets joins the key. |
 | `branch` | Passed to the sibling resolution in place of the run's branch (a tag push has none). |
+| `lock` | Passed to the sibling resolution as checkout-sibling's `lock` input. |
+| `tip` | Passed to the sibling resolution as checkout-sibling's `tip` input. |
 | `source-events` | Events a source run may have. Default `push pull_request schedule`. |
 | `wait-minutes` | Default 30 on a `pull_request`, 0 on other events, so a push never waits. |
 | `record` | Default `true`: a single commit that runs on a push, pull request or schedule is recorded. |

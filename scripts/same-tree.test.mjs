@@ -687,7 +687,8 @@ try {
 
   // resolve.sh: the first candidate the sibling has wins, bot branches never.
   const branches = { branches: { "catenahq/sib": ["main", "dev", "feature", "renovate/x"] } };
-  const resolve = (env) => exec(branches, { REPOSITORY: "catenahq/sib", ...env }, RESOLVE);
+  const NO_LOCK = join(work, "absent.lock");
+  const resolve = (env) => exec(branches, { REPOSITORY: "catenahq/sib", LOCK: NO_LOCK, ...env }, RESOLVE);
   const ref = (env) => {
     const r = resolve(env);
     assert.equal(r.status, 0, r.out);
@@ -715,6 +716,49 @@ try {
   assert.ok(got.calls.includes("refs/heads/dev [auth s3cr3t-token]"), got.calls);
   got = exec({ gitFail: true }, { REPOSITORY: "catenahq/sib", EVENT: "push", REF_TYPE: "branch", REF_NAME: "dev" }, RESOLVE);
   assert.notEqual(got.status, 0, "an unreadable sibling fails");
+  assert.equal(ref({ LOCK: NO_LOCK, EVENT: "pull_request", HEAD_REF: "nope", BASE_REF: "dev" }), "dev", "no lock file: today's result");
+
+  // With a lock file the same-named branch wins, else the lock's commit; the
+  // base and default branches do not apply. A missing line or a malformed line
+  // fails; tip ignores the lock.
+  const lockFile = (text) => {
+    const file = join(work, `lock${n++}`);
+    writeFileSync(file, text);
+    return file;
+  };
+  const LOCKED = "5".repeat(40);
+  const lock = lockFile(`# pins\n\ncatenahq/other ${"6".repeat(40)} # main\ncatenahq/sib ${LOCKED} # main\n`);
+  const pr = { EVENT: "pull_request", BASE_REF: "dev", LOCK: lock };
+  assert.equal(ref({ ...pr, HEAD_REF: "nope" }), LOCKED, "lock hit");
+  got = resolve({ ...pr, HEAD_REF: "nope" });
+  assert.ok(got.out.includes(`catenahq/sib: ${LOCKED} (lock)`), got.out);
+  assert.equal(ref({ ...pr, HEAD_REF: "feature" }), "feature", "same-named branch wins over the lock");
+  assert.equal(ref({ ...pr, HEAD_REF: "renovate/x" }), LOCKED, "bot branch skipped");
+  assert.equal(ref({ ...pr, HEAD_REF: "merge-back/x" }), LOCKED, "merge-back branch skipped");
+  assert.equal(ref({ ...pr, HEAD_REF: "nope", DEFAULT_BRANCH: "dev" }), LOCKED, "no base branch fallback");
+  assert.equal(ref({ LOCK: lock, EVENT: "push", REF_TYPE: "branch", REF_NAME: "main", DEFAULT_BRANCH: "main" }), LOCKED, "run on its default branch");
+  assert.equal(ref({ LOCK: lock, EVENT: "push", REF_TYPE: "tag", REF_NAME: "v1.0.0" }), LOCKED, "tag push");
+  assert.equal(ref({ ...pr, HEAD_REF: "nope", TIP: "true" }), "", "tip ignores the lock");
+  assert.equal(ref({ ...pr, HEAD_REF: "feature", TIP: "true" }), "", "tip is the default branch");
+  got = resolve({ ...pr, HEAD_REF: "nope", REPOSITORY: "catenahq/absent" });
+  assert.equal(got.status, 1, got.out);
+  assert.ok(got.out.includes(`${lock} has no line for catenahq/absent`), got.out);
+  for (const bad of [`catenahq/sib ${"5".repeat(39)}`, `catenahq/sib ${"5".repeat(41)} # main`, "catenahq/sib", `catenahq/sib ${"G".repeat(40)}`]) {
+    got = resolve({ ...pr, HEAD_REF: "nope", LOCK: lockFile(`${bad}\n`) });
+    assert.equal(got.status, 1, `${bad}\n${got.out}`);
+    assert.ok(got.out.includes(`malformed line '${bad}'`), got.out);
+  }
+  got = resolve({ ...pr, HEAD_REF: "nope", LOCK: lockFile(`catenahq/sib ${LOCKED}\ncatenahq/bad\n`) });
+  assert.equal(got.status, 1, "a malformed line for another sibling fails");
+
+  // same-tree keys a locked sibling on the lock's commit, a tip run on the
+  // default branch's.
+  const lockedKey = record([`tree=${T_HEAD}`, `catenahq/contracts=${LOCKED}`]);
+  const lockOf = lockFile(`catenahq/contracts ${LOCKED} # main\n`);
+  got = exec({ branches: { "catenahq/contracts": ["main"] } }, { GITHUB_REF_NAME: "other", ST_SIBLINGS: "catenahq/contracts", ST_LOCK: lockOf });
+  assert.equal(got.outputs["upload-name"], lockedKey, got.out);
+  got = exec({ branches: { "catenahq/contracts": ["main"] } }, { GITHUB_REF_NAME: "other", ST_SIBLINGS: "catenahq/contracts", ST_LOCK: lockOf, ST_TIP: "true" });
+  assert.equal(got.outputs["upload-name"], record([`tree=${T_HEAD}`, `catenahq/contracts=${C}`]), got.out);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

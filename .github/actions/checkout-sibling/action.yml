@@ -1,8 +1,10 @@
 name: checkout-sibling
 description: >-
-  Check out a sibling catenahq repo at the branch this run is on. The sibling's
-  branch of the same name when it has one and a bot did not name it; on a pull
-  request, then the base branch; else the sibling's default branch.
+  Check out a sibling catenahq repo. With a lock file in the consumer, the
+  sibling's branch of the same name when it has one and a bot did not name it,
+  else the commit the lock pins. With none, the branch this run is on: the
+  sibling's branch of the same name when it has one and a bot did not name it;
+  on a pull request, then the base branch; else the sibling's default branch.
 
 inputs:
   repository:
@@ -16,6 +18,14 @@ inputs:
       The branch to look for first, in place of the run's own (a tag push has
       no branch; the release guard names the one it verified).
     default: ''
+  lock:
+    description: >-
+      The consumer's lock file (lines of "<owner/name> <sha> # <branch>"). Empty:
+      .github/catenahq.lock under the workspace root, used when it exists.
+    default: ''
+  tip:
+    description: "'true' checks out the sibling's default branch and ignores the lock."
+    default: 'false'
   token:
     description: Token that can read the sibling (a private sibling needs more than the default).
     default: ${{ github.token }}
@@ -28,7 +38,7 @@ inputs:
 
 outputs:
   ref:
-    description: The branch checked out, or empty for the sibling's default branch.
+    description: The branch or commit checked out, or empty for the sibling's default branch.
     value: ${{ steps.resolve.outputs.ref }}
 
 runs:
@@ -40,6 +50,8 @@ runs:
         REPOSITORY: ${{ inputs.repository }}
         TOKEN: ${{ inputs.token }}
         BRANCH: ${{ inputs.branch }}
+        LOCK: ${{ inputs.lock }}
+        TIP: ${{ inputs.tip }}
         EVENT: ${{ github.event_name }}
         HEAD_REF: ${{ github.head_ref }}
         BASE_REF: ${{ github.base_ref }}
