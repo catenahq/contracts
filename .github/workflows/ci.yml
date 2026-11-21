@@ -67,12 +67,13 @@ jobs:
               | sed -E '/^  [^ :]+:[0-9]+: /{N;s/^(  [^ :]+):[0-9]+: ([^\n]*)\n +(.*)$/\1: \2 | \3/}'
       - name: Repo rules, brand smoke test, JSON artifacts and script tests
         # Script tests: comment parsers, the gates on a deleted tracked file,
-        # the new-failures-only and same-tree scripts.
+        # the new-failures-only and same-tree scripts, the checks matrix.
         uses: catenahq/contracts/.github/actions/new-failures-only@main
         with:
           working-directory: ${{ github.workspace }}
           repo-path: ${{ github.workspace }}
           run: |
+            npm ci --prefix scripts/ci --ignore-scripts --no-audit --no-fund
             node scripts/check-repo-rules.mjs
             node brand/test.js
             node scripts/validate-json.mjs
@@ -82,6 +83,7 @@ jobs:
             node scripts/new-failures-only.test.mjs
             node scripts/same-tree.test.mjs
             node scripts/check-core-app-names.test.mjs
+            node scripts/ci/checks-matrix.test.mjs
 
   duplication:
     # Copy-paste ratchet: .jscpd.json carries the baseline threshold;
