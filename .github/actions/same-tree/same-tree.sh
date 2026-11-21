@@ -17,6 +17,7 @@
 #   ST_SIBLINGS       owner/name list; the commit each one's checkout gets joins
 #                     the key
 #   ST_BRANCH         passed to checkout-sibling/resolve.sh
+#   ST_LOCK ST_TIP    passed to resolve.sh as LOCK and TIP
 #   ST_DEFAULT_BRANCH the run's default branch, passed to resolve.sh
 #   ST_SOURCE_EVENTS  events a source run may have
 #   ST_WAIT_MINUTES   how long to wait for a source still going; default 30
@@ -156,17 +157,22 @@ branch_sha() {
 }
 
 # The sibling lines of the key, the same for every commit: each sibling with
-# the commit its checkout gets, the tip of the branch checkout-sibling picks
-# (the default branch when it picks none).
+# the commit its checkout gets: the commit checkout-sibling picks from the
+# lock, else the tip of the branch it picks (the default branch when it picks
+# none).
 sibling_lines() {
   local s ref sha
   for s in "${SIBLINGS[@]}"; do
-    ref="$(REPOSITORY="$s" TOKEN="${ST_SIBLING_TOKEN:-}" BRANCH="${ST_BRANCH:-}" EVENT="$EVENT" \
+    ref="$(REPOSITORY="$s" TOKEN="${ST_SIBLING_TOKEN:-}" BRANCH="${ST_BRANCH:-}" LOCK="${ST_LOCK:-}" TIP="${ST_TIP:-}" EVENT="$EVENT" \
       HEAD_REF="${GITHUB_HEAD_REF:-}" BASE_REF="${GITHUB_BASE_REF:-}" \
       REF_NAME="${GITHUB_REF_NAME:-}" REF_TYPE="${GITHUB_REF_TYPE:-}" DEFAULT_BRANCH="${ST_DEFAULT_BRANCH:-}" bash "$RESOLVE")" || return 1
     [ -n "$ref" ] || ref="$(default_branch "$s")"
     [ -n "$ref" ] || return 1
-    sha="$(branch_sha "$s" "$ref")" || return 1
+    if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+      sha="$ref"
+    else
+      sha="$(branch_sha "$s" "$ref")" || return 1
+    fi
     printf '%s=%s\n' "$s" "$sha"
   done
 }
