@@ -142,6 +142,13 @@ one `<owner/name>=<sha>` line per sibling, sorted, naming the commit at the
 commit `checkout-sibling/resolve.sh` picks from the lock, else the tip of the
 branch it picks (the default branch when it picks none), read with
 `git ls-remote`. Trees and parents come from the commits API, so no checkout is needed.
+The job has no checkout, so the lock is the repository's
+`.github/catenahq.lock` at each judged commit, read through the contents API:
+each commit's key names the commits its own lock pins, the same ones a job
+checked out at that commit gets. A 404 means the commit has no lock and the
+branch tips key the siblings; any other failure of that read fails the step.
+The `lock` input, or a lock file under the workspace, is read instead; `tip`
+reads no lock.
 A run that does its checks records the key as an artifact named
 `same-tree.<name>.<first 40 hex of sha256(key)>`, kept 30 days.
 
@@ -177,12 +184,12 @@ upload does not fail the job.
 | `judge-change` | `true` adds the base tree to the key: the line's base, else the first parent. |
 | `siblings` | owner/name list: every repository the workflow checks out with checkout-sibling; the commit each checkout gets joins the key. |
 | `branch` | Passed to the sibling resolution in place of the run's branch (a tag push has none). |
-| `lock` | Passed to the sibling resolution as checkout-sibling's `lock` input. |
+| `lock` | Passed to the sibling resolution as checkout-sibling's `lock` input. Empty: the lock file under the workspace when it exists, else the lock at each judged commit, read through the API. |
 | `tip` | Passed to the sibling resolution as checkout-sibling's `tip` input. |
 | `source-events` | Events a source run may have. Default `push pull_request schedule`. |
 | `wait-minutes` | Default 30 on a `pull_request`, 0 on other events, so a push never waits. |
 | `record` | Default `true`: a single commit that runs on a push, pull request or schedule is recorded. |
-| `token` | Reads this repository's runs, artifacts and commits. Default `github.token`; the job grants `contents: read` and `actions: read`. |
+| `token` | Reads this repository's runs, artifacts, commits and lock. Default `github.token`; the job grants `contents: read` and `actions: read`. |
 | `sibling-token` | Reads the siblings' branches. Default `github.token`; a private sibling needs the token the workflow's checkout-sibling steps pass. |
 
 | Output | Meaning |

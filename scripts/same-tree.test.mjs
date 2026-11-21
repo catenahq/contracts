@@ -161,10 +161,18 @@ ${STUB_LIB}
 const { render } = require("./jq.cjs");
 const [, , cmd, path, flag, expr] = process.argv;
 log("gh " + path + " [token " + (process.env.GH_TOKEN || "none") + "]");
-if (cmd !== "api" || flag !== "--jq") process.exit(2);
-if ((state.fail || []).some((f) => path.includes(f))) { console.error("HTTP 500"); process.exit(1); }
+if (cmd !== "api" || (flag !== "--jq" && flag !== "-H")) process.exit(2);
+if ((state.fail || []).some((f) => path.includes(f))) { console.error("gh: HTTP 500"); process.exit(1); }
 const [p, q = ""] = path.split("?");
 const query = Object.fromEntries(new URLSearchParams(q));
+// The raw file at a ref, as the contents API serves it with the raw media type.
+if (flag === "-H" && p.endsWith("/contents/.github/catenahq.lock")) {
+  const text = take(state.locks, query.ref);
+  if (text === undefined) { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }
+  process.stdout.write(text);
+  process.exit(0);
+}
+if (flag !== "--jq") process.exit(2);
 let m;
 let body;
 if ((m = p.match(/\\/git\\/commits\\/([0-9a-f]+)$/))) {
@@ -341,6 +349,7 @@ function exec(state, env = {}, script = SCRIPT) {
       PATH: `${bin}:${process.env.PATH}`,
       HOME: process.env.HOME,
       RUNNER_TEMP: dir,
+      GITHUB_WORKSPACE: dir,
       GITHUB_REPOSITORY: "catenahq/demo",
       GITHUB_REPOSITORY_ID: "100",
       GITHUB_RUN_ID: "900",
@@ -759,6 +768,64 @@ try {
   assert.equal(got.outputs["upload-name"], lockedKey, got.out);
   got = exec({ branches: { "catenahq/contracts": ["main"] } }, { GITHUB_REF_NAME: "other", ST_SIBLINGS: "catenahq/contracts", ST_LOCK: lockOf, ST_TIP: "true" });
   assert.equal(got.outputs["upload-name"], record([`tree=${T_HEAD}`, `catenahq/contracts=${C}`]), got.out);
+
+  // With no lock input and none in the workspace, the lock at the judged
+  // commit is read through the API and its pins key the siblings.
+  const apiEnv = { GITHUB_REF_NAME: "other", ST_SIBLINGS: "catenahq/contracts" };
+  const apiState = { branches: { "catenahq/contracts": ["main", "feature"] }, shas: { "catenahq/contracts/feature": F } };
+  got = exec({ ...apiState, locks: { [HEAD]: `catenahq/contracts ${LOCKED} # main\n` } }, apiEnv);
+  assert.equal(got.status, 0, got.out);
+  assert.equal(got.outputs["upload-name"], lockedKey, got.out);
+  assert.ok(got.calls.includes(`gh repos/catenahq/demo/contents/.github/catenahq.lock?ref=${HEAD} [token api-token]`), got.calls);
+  // The same-named branch wins over the pin, as in checkout-sibling.
+  got = exec({ ...apiState, locks: { [HEAD]: `catenahq/contracts ${LOCKED} # main\n` } }, { ...apiEnv, GITHUB_REF_NAME: "feature" });
+  assert.equal(got.outputs["upload-name"], record([`tree=${T_HEAD}`, `catenahq/contracts=${F}`]), got.out);
+  // The lock input and a lock file in the workspace are read as before.
+  got = exec({ ...apiState, locks: { [HEAD]: `catenahq/contracts ${LOCKED} # main\n` } }, { ...apiEnv, ST_LOCK: lockFile(`catenahq/contracts ${"4".repeat(40)} # main\n`) });
+  assert.equal(got.outputs["upload-name"], record([`tree=${T_HEAD}`, `catenahq/contracts=${"4".repeat(40)}`]), got.out);
+  assert.ok(!got.calls.includes("contents/"), got.calls);
+  // tip ignores the lock and does not read it.
+  got = exec({ ...apiState, locks: { [HEAD]: `catenahq/contracts ${LOCKED} # main\n` } }, { ...apiEnv, ST_TIP: "true" });
+  assert.equal(got.outputs["upload-name"], record([`tree=${T_HEAD}`, `catenahq/contracts=${C}`]), got.out);
+  assert.ok(!got.calls.includes("contents/"), got.calls);
+  // A 404 means no lock: the branch tips key the siblings.
+  got = exec(apiState, apiEnv);
+  assert.equal(got.status, 0, got.out);
+  assert.ok(got.calls.includes("contents/.github/catenahq.lock"), got.calls);
+  assert.equal(got.outputs["upload-name"], record([`tree=${T_HEAD}`, `catenahq/contracts=${C}`]), got.out);
+  // Any other failure fails the step: a failed read is not "no lock".
+  got = exec({ ...apiState, fail: ["contents/"] }, apiEnv);
+  assert.equal(got.status, 1, got.out);
+  assert.ok(got.out.includes("::error::same-tree: cannot read .github/catenahq.lock"), got.out);
+  assert.equal(got.outputs.run, undefined, got.out);
+  // A lock with no line for the sibling cannot key it: the checks run, with a
+  // warning and no record.
+  got = exec({ ...apiState, locks: { [HEAD]: `catenahq/other ${LOCKED} # main\n` } }, apiEnv);
+  assert.equal(got.status, 0, got.out);
+  assert.equal(got.outputs.run, "true", got.out);
+  assert.equal(got.outputs["upload-name"], undefined, got.out);
+  assert.ok(got.out.includes("::warning::"), got.out);
+
+  // Each commit's own lock applies: two commits with different locks give
+  // different keys, so a result recorded under one pin is not reused by a
+  // commit that pins another.
+  const LOCKED2 = "4".repeat(40);
+  const keyA = record([`tree=${T_HEAD}`, `catenahq/contracts=${LOCKED}`]);
+  const keyB = record([`tree=${T_OTHER}`, `catenahq/contracts=${LOCKED2}`]);
+  assert.notEqual(keyA, keyB);
+  const pair = (lockB) => ({
+    ...apiState,
+    locks: { [HEAD]: `catenahq/contracts ${LOCKED} # main\n`, [OTHER]: `catenahq/contracts ${lockB} # main\n` },
+    artifacts: { [keyA]: artifacts(keyA, [{ run: 500 }]), [keyB]: artifacts(keyB, [{ run: 501, headSha: OTHER }]) },
+    runs: { 500: run(500, { conclusion: "success" }), 501: run(501, { conclusion: "success", headSha: OTHER }) },
+  });
+  const both = { ...apiEnv, ST_COMMITS: `${HEAD}\n${OTHER}` };
+  got = exec(pair(LOCKED2), both);
+  assert.equal(got.outputs.run, "false", got.out);
+  assert.equal(got.outputs.results, `${HEAD} success ${URL}500\n${OTHER} success ${URL}501`, got.out);
+  got = exec(pair(LOCKED), both);
+  assert.equal(got.outputs.run, "true", got.out);
+  assert.equal(got.outputs.results, `${HEAD} success ${URL}500`, got.out);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
