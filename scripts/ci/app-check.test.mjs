@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildMatrix } from "./checks-matrix.mjs";
+import { fails, ok } from "./run-result.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP_PLAN = join(HERE, "app-plan.sh");
@@ -176,15 +177,6 @@ function exec(script, args, { cwd = catalog, state = {}, env = {}, tar = IMAGE_T
     summary: readFileSync(files.GITHUB_STEP_SUMMARY, "utf-8"), log: readFileSync(files.STUB_LOG, "utf-8").split("\n").filter(Boolean),
   };
 }
-const ok = (r, label) => {
-  assert.equal(r.status, 0, `${label}: exit ${r.status}\n${r.out}\n${r.err}`);
-  return r;
-};
-const fails = (r, label, message) => {
-  assert.notEqual(r.status, 0, `${label}: passed\n${r.out}\n${r.err}`);
-  if (message) assert.ok(`${r.out}${r.err}`.includes(message), `${label}: want "${message}"\n${r.out}\n${r.err}`);
-  return r;
-};
 
 const LOCK = `catenahq/contracts ${"c".repeat(40)} # main\ncatenahq/catena-templates ${"d".repeat(40)} # main\n`;
 const planOf = (catalogTools) =>

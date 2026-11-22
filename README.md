@@ -609,15 +609,16 @@ jobs:
       version: ${{ inputs.version }}
 ```
 
-`pull_request_target` runs the file of the base branch, never the pull
-request's code: no job checks the pull request out, and both load the CI code
-from contracts at `job.workflow_sha` under `.catena-ci/`. The workflow declares
-no secret.
+`pull_request_target` and `workflow_run` run the file of the base branch, never
+the pull request's code: every job loads the CI code from contracts at
+`job.workflow_sha` under `.catena-ci/`, and only `dispatch` checks the pull
+request out, as data its tools read (see "App dispatch"). The workflow declares
+no secret: the CI App's are those of the caller's environment `ci`.
 
 | Input | Meaning |
 | --- | --- |
 | `runner` | Required. The runner label of every job. |
-| `apps` | `true`: the `ci / gate` status and the updater also wait for the `app-tests` status. Default `false`. |
+| `apps` | `true`: the `ci / gate` status and the updater also wait for the `app-tests` status, and `dispatch` and `tag` run. Default `false`. |
 | `release` | `true` for a repository released from its `release` branch. Default `false`; no job reads it. |
 | `step`, `version` | The release step and version of a `workflow_dispatch` run. Default empty; no job reads them. |
 
@@ -634,6 +635,11 @@ no secret.
   it. Its concurrency group is `update-<owner/name>` without
   `cancel-in-progress`: one updater runs per repository, and a newer run
   replaces the one waiting.
+- `dispatch`, with `apps`, runs on the `workflow_run` of a `ci` run of a pull
+  request of this repository that was not cancelled, and sends its app to the
+  app tests (see "App dispatch").
+- `tag`, with `apps`, runs on a `push` to the default branch and tags the apps
+  of the pull request merged as the pushed commit (see "App tag").
 
 The job runs the updater with the token as `GH_TOKEN`:
 
@@ -679,6 +685,86 @@ A GitHub API error exits 1 and nothing after it runs: a failed query never
 reads as "no candidate". Bad arguments exit 2. `scripts/ci/update.test.mjs`
 drives the script with a `gh` stub on `PATH` and payloads shaped as GitHub
 returns them, under `scripts/ci/fixtures/update/`.
+
+### App dispatch
+
+The `dispatch` job of `control.yml` asks the app tests of catenahq/ops to run
+the app a pull request changes, once its `ci` run completed. `workflow_run`
+lists no pull request of a fork, so the job runs for a pull request of the
+caller's own repository only. It runs in the caller's environment `ci`, where
+it mints a CI App token that writes to ops alone, and holds `contents: read`,
+`statuses: write` and `pull-requests: read`. A newer head of the same pull
+request cancels the send still running for an older one.
+
+The tools are the base's: the caller is checked out at the default branch, the
+`apps` key of its `.github/checks.yml` is read with `checks-matrix.mjs`, and the
+tools are that tree with `apps.catalog: true`, else catena-templates at its
+lock under `.tools`. The pull request head is checked out under `pr/` with its
+history and tags, and is data only: the tools read it with git through
+`TEMPLATES_ROOT`, uv runs in the tools' own project with `UV_NO_CONFIG=1`, and
+nothing of it runs. `scripts/ci/app-dispatch.sh` then:
+
+- reads the pull request, and stops when it is closed or its head is no longer
+  the commit the `ci` run judged: the run of the newer head sends it;
+- judges the change from where the head left its base branch, fails on a
+  change of more than one app (`build/versions.py scope`), and lists the apps it
+  touches and still has (`build/app_check.py changed`), each id matching
+  `^[a-z0-9][a-z0-9-]*$`;
+- with no app, posts the `app-tests` status `success`, `no app changed`, and
+  sends nothing;
+- for one app, carries the verdict of the first of these that holds the same
+  change: the head, the pull request's earlier commits (`pulls/<n>/commits`)
+  newest first, and with `success` the run that made the app's newest tag
+  (`build/versions.py tested-run`). A verdict counts when it is the newest
+  `app-tests` status of the commit, posted by the CI App with the address of an
+  ops run, its description names exactly the app (`passed 1 app(s): <id>` or
+  `failed: <id>`, each with an optional note), and `build/versions.py same`
+  finds the app's files differ in presentation alone;
+- reads `catenahq/ops` and `catenahq/contracts` from the head's
+  `.github/catenahq.lock` (a missing line fails the step), and sends the
+  `repository_dispatch` event `app-test` to ops with the payload `{sha, base,
+  ids, ref, repo, carry, carry_state, own_images, ops_sha, contracts_sha, pr}`:
+  the head, the commit it is judged from, the app, the head branch, the
+  repository's name, the carried run and its state (both empty when the app
+  runs), `apps.own-images` joined by commas, the two locked commits and the
+  pull request number.
+
+The job then posts the `ci / gate` status with `gate-status.mjs --app-tests`.
+A GitHub API or git error fails the step: a failed read is never "no verdict".
+
+### App tag
+
+The `tag` job of `control.yml` runs on a push to the default branch, in the
+caller's environment `ci`, with `contents: read`, `statuses: read` and
+`pull-requests: read`. It checks the pushed commit out with its history and
+tags, takes the tools as `dispatch` does, and mints a CI App token for the
+caller with `contents: write` and `workflows: write` (writing a ref takes the
+workflows permission when the tagged history holds workflow changes): the App
+is the one actor the tag ruleset lets create or move a `*/*` tag.
+`scripts/ci/app-tag.sh`:
+
+- finds the pull request merged as the pushed commit
+  (`repos/<r>/commits/<sha>/pulls`, `merge_commit_sha` equal to it; asked again
+  after 10 seconds, since the list can lag the merge); none tags nothing;
+- reads the newest `app-tests` status of its head: `no app changed` tags
+  nothing; anything else than a `success` of the CI App, with the address of an
+  ops run and a description that names its apps (`passed <n> app(s): <id>, ...`),
+  fails the job;
+- fetches the head by its id when the merge left it out of the history, and
+  for each app checks with `build/versions.py same` that the app's files at the
+  pushed commit, judged from its first parent, are the change that passed at
+  the head, in presentation alone; a difference fails the job;
+- plans each app's tag with `build/versions.py plan --ref <sha>` and writes it
+  through the API: `create TAG` an annotated tag on the pushed commit,
+  `create TAG FROM` the same whose annotation adds that the runtime and tests
+  are FROM's, `mark TAG` annotates a tag made by hand where it stands, `skip`
+  writes nothing. The annotation opens with `app-tests passed at <head>:
+  <run>`. A tag another run created first makes the job read the tags again and
+  plan the app once more, up to three times.
+
+Every merge passed `ci / gate`, which waits for `app-tests`, so a tag needs no
+other check. `scripts/ci/app-dispatch-tag.test.mjs` drives both scripts over
+scratch git repositories with stubs for `gh`, `uv` and `sleep` on `PATH`.
 
 ## How to change a contract
 

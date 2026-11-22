@@ -8,9 +8,12 @@ name: control
 # pull_request_target events, so an edited Depends-on line counts at once.
 # update brings the oldest ready auto-merge pull request of each base up to
 # date with it, one at a time, and on a push recomputes the status of the open
-# pull requests that depend on the one merged. Both load the CI code from this
-# repository at the commit the caller pins (job.workflow_sha) and never check
-# out the caller's pull request.
+# pull requests that depend on the one merged. With apps, dispatch sends the
+# app a pull request changes to the app tests after its ci run, and tag tags
+# the apps of a merged pull request on the push of its merge. Every job loads
+# the CI code from this repository at the commit the caller pins
+# (job.workflow_sha); only dispatch checks out the caller's pull request, as
+# data its tools read, never run.
 
 on:
   workflow_call:
@@ -20,7 +23,7 @@ on:
         type: string
         required: true
       apps:
-        description: The ci / gate status and the updater also wait for the app-tests status.
+        description: The ci / gate status and the updater also wait for the app-tests status; dispatch and tag run.
         type: boolean
         default: false
       release:
@@ -124,3 +127,202 @@ jobs:
           args=(--repo "$REPO" --event "$EVENT" --sha "$SHA")
           if [ "$APPS" = true ]; then args+=(--apps); fi
           node .catena-ci/scripts/ci/update.mjs "${args[@]}"
+
+  dispatch:
+    # After the ci run of a pull request of this repository: workflow_run lists
+    # no pull request of a fork.
+    if: >-
+      inputs.apps && github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.pull_requests[0].number
+    runs-on: ${{ inputs.runner }}
+    # The CI App's client id and private key are secrets of the caller's
+    # environment ci.
+    environment:
+      name: ci
+      deployment: false
+    # A newer head of the pull request cancels the send of an older one.
+    concurrency:
+      group: dispatch-${{ github.repository }}-${{ github.event.workflow_run.pull_requests[0].number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read # the CI code, the tools and the pull request head
+      statuses: write # app-tests when no app changed, and ci / gate
+      pull-requests: read # the pull request, its commits and the pull requests it depends on
+    env:
+      # uv reads no configuration of a checked-out tree.
+      UV_NO_CONFIG: "1"
+    steps:
+      - name: Mint a CI App token that sends to ops
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ops
+          permission-contents: write
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.13.1"
+      - name: Install the YAML parser
+        run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      - name: Check out the base
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          path: caller
+          persist-credentials: false
+      # The tools are the base's: this tree's with apps.catalog true, else those
+      # of catena-templates at the base's lock.
+      - name: The app settings
+        id: apps
+        working-directory: caller
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          RUNNER_LABEL: ${{ inputs.runner }}
+        run: |
+          set -euo pipefail
+          plan="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --repo "$REPO_NAME" --runner "$RUNNER_LABEL")"
+          apps="$(jq -c .apps <<< "$plan")"
+          if [ "$(jq -r .enabled <<< "$apps")" != true ]; then
+            echo "::error::the input apps is true and .github/checks.yml has no apps key"
+            exit 1
+          fi
+          tools="$GITHUB_WORKSPACE/caller"
+          if [ "$(jq -r .catalog <<< "$apps")" != true ]; then tools="$GITHUB_WORKSPACE/.tools"; fi
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+          echo "tools=$tools" >> "$GITHUB_OUTPUT"
+      - name: Check out the app tools
+        if: ${{ !fromJSON(steps.apps.outputs.apps).catalog }}
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-templates
+          path: .tools
+          lock: caller/.github/catenahq.lock
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ fromJSON(steps.apps.outputs.apps).app.tools.uv }}
+          enable-cache: false
+      # Data only: the tools read it with git, nothing in it runs.
+      - name: Check out the pull request head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: pr
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Send the app to the app tests
+        env:
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          TEMPLATES_ROOT: ${{ github.workspace }}/pr
+          TOOLS: ${{ steps.apps.outputs.tools }}
+          OWN_IMAGES: ${{ fromJSON(steps.apps.outputs.apps).own-images }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ github.token }}
+          OPS_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-dispatch.sh"
+      - name: Post the commit status ci / gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node .catena-ci/scripts/ci/gate-status.mjs --repo "$REPO" --pr "$PR" --sha "$SHA" --app-tests
+
+  tag:
+    if: inputs.apps && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    runs-on: ${{ inputs.runner }}
+    # The CI App's client id and private key are secrets of the caller's
+    # environment ci.
+    environment:
+      name: ci
+      deployment: false
+    permissions:
+      contents: read # the CI code, the history and the tags
+      statuses: read # the app-tests status of the merged head
+      pull-requests: read # the pull request merged as the pushed commit
+    env:
+      UV_NO_CONFIG: "1"
+    steps:
+      - name: Mint a CI App token that writes tags
+        # The App is the one actor the tag ruleset lets create or move a */* tag.
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          # Writing a ref (git/refs) also takes the workflows permission when the tagged
+          # history holds workflow changes (GitHub lists those endpoints under Workflows too).
+          permission-workflows: write
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.13.1"
+      - name: Install the YAML parser
+        run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      - name: Check out the pushed commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          path: caller
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      # The tools: this tree's with apps.catalog true, else those of
+      # catena-templates at the pushed commit's lock.
+      - name: The app settings
+        id: apps
+        working-directory: caller
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          RUNNER_LABEL: ${{ inputs.runner }}
+        run: |
+          set -euo pipefail
+          plan="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --repo "$REPO_NAME" --runner "$RUNNER_LABEL")"
+          apps="$(jq -c .apps <<< "$plan")"
+          if [ "$(jq -r .enabled <<< "$apps")" != true ]; then
+            echo "::error::the input apps is true and .github/checks.yml has no apps key"
+            exit 1
+          fi
+          tools="$GITHUB_WORKSPACE/caller"
+          if [ "$(jq -r .catalog <<< "$apps")" != true ]; then tools="$GITHUB_WORKSPACE/.tools"; fi
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+          echo "tools=$tools" >> "$GITHUB_OUTPUT"
+      - name: Check out the app tools
+        if: ${{ !fromJSON(steps.apps.outputs.apps).catalog }}
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-templates
+          path: .tools
+          lock: caller/.github/catenahq.lock
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ fromJSON(steps.apps.outputs.apps).app.tools.uv }}
+          enable-cache: false
+      - name: Tag the apps
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          TEMPLATES_ROOT: ${{ github.workspace }}/caller
+          TOOLS: ${{ steps.apps.outputs.tools }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ github.token }}
+          TAG_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-tag.sh"
