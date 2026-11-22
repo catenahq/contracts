@@ -1,5 +1,5 @@
 // checks-matrix.mjs over the checks.yml of ci-runner, catena-admin and ops,
-// and each key it refuses. Run with `node scripts/ci/checks-matrix.test.mjs`
+// their scan settings, and each key it refuses. Run with `node scripts/ci/checks-matrix.test.mjs`
 // after `npm ci --prefix scripts/ci`.
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
@@ -51,6 +51,12 @@ checks:
   staticcheck:   # report-only: ci/run exits 0 with a warning
     tools: {go: go.mod, staticcheck: {version: 2026.2.2, sha256: 14c081e0f0d05b5a4d4c53fd3d357d4a5af9d20501465fefc9024ee828d3aa5c}}
     inputs: ['*.go', '**/*.go', go.mod, go.sum]
+scan:
+  profile: full
+  own-images: [catena-admin:ci]
+  image-inputs: [Dockerfile, go.mod, go.sum, scripts/vendor-catena-ce.sh, scanctl.yml, .scanctl/]
+  siblings: {catena-ce: {fetch-depth: 0}}
+  tools: {go: go.mod}
 `,
   ops: `gates:
   duplication: true
@@ -78,6 +84,7 @@ checks:
 const NO_TOOLS = { node: "", uv: "", go: "", staticcheck: "", "staticcheck-sha256": "" };
 const NO_SIB = Object.fromEntries(SIBLINGS.map((s) => [s, ""]));
 const NO_GATES = { "core-app-names": [], duplication: false };
+const NO_SCAN = { enabled: false, profile: "full", "own-images": "", "image-inputs": [], sib: NO_SIB, tools: { go: "" } };
 const matrix = (repo, extra = {}) =>
   buildMatrix({ checks: CHECKS[repo], lock: LOCK[repo], secrets: [], runner: "catena-ci", ...extra });
 const refuses = (extra, message, repo = "ci-runner") =>
@@ -105,12 +112,18 @@ assert.deepEqual(matrix("ci-runner"), {
       tools: { ...NO_TOOLS, uv: "0.13.9" }, sib: NO_SIB, gates: NO_GATES,
     },
   ],
+  scan: NO_SCAN,
 });
 
 // catena-admin: gate arguments, a deep sibling, Go from go.mod, staticcheck by
-// its checksum, and a check's own runner.
+// its checksum, a check's own runner, and a scan with an own image.
 {
-  const [gates, go, staticcheck] = matrix("catena-admin").include;
+  const { include: [gates, go, staticcheck], scan } = matrix("catena-admin");
+  assert.deepEqual(scan, {
+    enabled: true, profile: "full", "own-images": "catena-admin:ci",
+    "image-inputs": ["Dockerfile", "go.mod", "go.sum", "scripts/vendor-catena-ce.sh", "scanctl.yml", ".scanctl/"],
+    sib: { ...NO_SIB, "catena-ce": "0" }, tools: { go: "go.mod" },
+  });
   assert.deepEqual(gates.gates, { "core-app-names": ["--exclude", "central/", "."], duplication: true });
   assert.deepEqual(go, {
     name: "go", "runs-on": "catena-ci", timeout: 40, "go-cache": true,
@@ -138,9 +151,27 @@ refuses({}, "checks.python.siblings.catena-admin.token: CATENA_EE_READ_TOKEN is 
   assert.deepEqual(audit.tools, { ...NO_TOOLS, uv: "0.13.9", go: "1.26.10" });
 }
 
+// An empty scan key scans the tree with profile full and builds no image.
+{
+  const { scan } = buildMatrix({ checks: "gates: {}\nscan:\n", lock: LOCK["ci-runner"], secrets: [], runner: "catena-ci" });
+  assert.deepEqual(scan, { ...NO_SCAN, enabled: true });
+  const sellable = buildMatrix({ checks: "gates: {}\nscan: {profile: sellable}\n", lock: LOCK["ci-runner"], secrets: [], runner: "catena-ci" });
+  assert.equal(sellable.scan.profile, "sellable");
+}
+
 // Each refusal names its key.
 const ci = (body) => ({ checks: body });
-refuses(ci("gates: {}\nscan: {}\n"), ".github/checks.yml: unknown key 'scan'");
+refuses(ci("gates: {}\nlint: {}\n"), ".github/checks.yml: unknown key 'lint'");
+refuses(ci("gates: {}\nscan: {no-gate: true}\n"), "scan: unknown key 'no-gate'");
+refuses(ci("gates: {}\nscan: [full]\n"), "scan must be a mapping");
+refuses(ci("gates: {}\nscan: {profile: fast}\n"), "scan.profile must be one of full, sellable");
+refuses(ci("gates: {}\nscan: {own-images: [app:ci]}\n"), "scan.own-images needs image-inputs");
+refuses(ci("gates: {}\nscan: {own-images: app:ci, image-inputs: [Dockerfile]}\n"), "scan.own-images must be a list of image refs");
+refuses(ci("gates: {}\nscan: {own-images: ['app :ci'], image-inputs: [Dockerfile]}\n"), "scan.own-images must be a list of image refs");
+refuses(ci("gates: {}\nscan: {own-images: [app:ci], image-inputs: Dockerfile}\n"), "scan.image-inputs must be a list of git pathspecs");
+refuses(ci("gates: {}\nscan: {siblings: {catena-ce: {}}}\n"), "scan.siblings.catena-ce: catenahq/catena-ce has no line in .github/catenahq.lock");
+refuses(ci("gates: {}\nscan: {tools: {uv: 0.13.9}}\n"), "scan.tools: unknown key 'uv'");
+refuses(ci("gates: {}\nscan: {tools: {go: '1.26'}}\n"), "scan.tools.go must be go.mod or an exact version");
 refuses(ci("checks:\n  python:\n    command: make\n"), "checks.python: unknown key 'command'");
 refuses(ci("checks:\n  python:\n    tools: {python: 3.13.0}\n"), "checks.python.tools: unknown key 'python'");
 refuses(ci("checks:\n  python:\n    tools: {uv: latest}\n"), "checks.python.tools.uv must be an exact version");

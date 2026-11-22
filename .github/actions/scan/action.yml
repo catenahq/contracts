@@ -1,0 +1,203 @@
+name: scan
+description: >-
+  The scanctl scan of the shared PR workflow. Checks the caller out under
+  ws/<repo> with its history and the siblings the scan names, builds scanctl
+  at the commit .catena-ci/.github/catenahq.lock pins, builds the caller's own
+  images with bash ci/run image on a scheduled run or when a change touches
+  their inputs, runs scanctl, and reports the findings. The job checks
+  contracts out under .catena-ci first.
+
+inputs:
+  scan:
+    description: The plan job's scan output (JSON, scripts/ci/checks-matrix.mjs).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check out the caller
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      with:
+        path: ws/${{ github.event.repository.name }}
+        fetch-depth: 0 # gitleaks scans past commits; the image rule reads the first parent
+        persist-credentials: false
+    # One step per sibling the matrix parser knows (SIBLINGS in
+    # scripts/ci/checks-matrix.mjs), each at the caller's lock.
+    - name: Check out sibling catena-admin
+      if: fromJSON(inputs.scan).sib.catena-admin != ''
+      uses: ./.catena-ci/.github/actions/checkout-sibling
+      with:
+        repository: catenahq/catena-admin
+        path: ws/catena-admin
+        lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+        fetch-depth: ${{ fromJSON(inputs.scan).sib.catena-admin }}
+    - name: Check out sibling catena-ce
+      if: fromJSON(inputs.scan).sib.catena-ce != ''
+      uses: ./.catena-ci/.github/actions/checkout-sibling
+      with:
+        repository: catenahq/catena-ce
+        path: ws/catena-ce
+        lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+        fetch-depth: ${{ fromJSON(inputs.scan).sib.catena-ce }}
+    - name: Check out sibling catena-templates
+      if: fromJSON(inputs.scan).sib.catena-templates != ''
+      uses: ./.catena-ci/.github/actions/checkout-sibling
+      with:
+        repository: catenahq/catena-templates
+        path: ws/catena-templates
+        lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+        fetch-depth: ${{ fromJSON(inputs.scan).sib.catena-templates }}
+    - name: Check out sibling contracts
+      if: fromJSON(inputs.scan).sib.contracts != ''
+      uses: ./.catena-ci/.github/actions/checkout-sibling
+      with:
+        repository: catenahq/contracts
+        path: ws/contracts
+        lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+        fetch-depth: ${{ fromJSON(inputs.scan).sib.contracts }}
+    - name: Check out sibling docs
+      if: fromJSON(inputs.scan).sib.docs != ''
+      uses: ./.catena-ci/.github/actions/checkout-sibling
+      with:
+        repository: catenahq/docs
+        path: ws/docs
+        lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+        fetch-depth: ${{ fromJSON(inputs.scan).sib.docs }}
+    - name: Check out sibling ops
+      if: fromJSON(inputs.scan).sib.ops != ''
+      uses: ./.catena-ci/.github/actions/checkout-sibling
+      with:
+        repository: catenahq/ops
+        path: ws/ops
+        lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+        fetch-depth: ${{ fromJSON(inputs.scan).sib.ops }}
+    - name: Read the scanctl commit
+      id: lock
+      shell: bash
+      run: |
+        set -euo pipefail
+        sha=""
+        while read -r repo commit _ || [ -n "$repo" ]; do
+          if [ "$repo" = catenahq/scanctl ]; then sha="$commit"; fi
+        done < .catena-ci/.github/catenahq.lock
+        if [ -z "$sha" ]; then
+          echo "::error::.catena-ci/.github/catenahq.lock has no catenahq/scanctl line"
+          exit 1
+        fi
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
+    - name: Build scanctl
+      uses: ./.catena-ci/.github/actions/scanctl
+      with:
+        sha: ${{ steps.lock.outputs.sha }}
+        self: ${{ github.repository == 'catenahq/scanctl' }}
+    - name: Install uv
+      # uv backs the Python scanners (semgrep, guarddog), fetched at scan time.
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        version: 0.13.9
+        enable-cache: false
+    - if: fromJSON(inputs.scan).tools.go != ''
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      with:
+        go-version: ${{ fromJSON(inputs.scan).tools.go != 'go.mod' && fromJSON(inputs.scan).tools.go || '' }}
+        go-version-file: ${{ fromJSON(inputs.scan).tools.go == 'go.mod' && format('ws/{0}/go.mod', github.event.repository.name) || '' }}
+        cache: false
+    - name: Image inputs
+      # The own images are built on a scheduled run, and when the change (the
+      # checked-out commit against its first parent) touches an image input.
+      id: image
+      if: fromJSON(inputs.scan).own-images != ''
+      shell: bash
+      working-directory: ws/${{ github.event.repository.name }}
+      env:
+        SCAN: ${{ inputs.scan }}
+        EVENT: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        build=true
+        if [ "$EVENT" != schedule ]; then
+          mapfile -t paths < <(jq -r '.["image-inputs"][]' <<< "$SCAN")
+          changed="$(git diff --name-only HEAD^1 HEAD -- "${paths[@]}")"
+          if [ -z "$changed" ]; then
+            build=false
+            echo "no image input changed: the tree is scanned, the images are not built"
+          else
+            printf 'image inputs changed:\n%s\n' "$changed"
+          fi
+        fi
+        echo "build=$build" >> "$GITHUB_OUTPUT"
+    - name: Expose GitHub's cache to the image build
+      # ci/run image reads and writes build cache with type=gha; a run: step
+      # gets the cache service only through this. Every later run: step blanks
+      # the token again.
+      if: steps.image.outputs.build == 'true'
+      uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+    - name: bash ci/run image
+      if: steps.image.outputs.build == 'true'
+      shell: bash
+      working-directory: ws/${{ github.event.repository.name }}
+      run: bash ci/run image
+    - name: Run scanctl
+      shell: bash
+      working-directory: ws/${{ github.event.repository.name }}
+      env:
+        # zizmor's API-backed audits use this when present; absent, it runs --offline.
+        GH_TOKEN: ${{ github.token }}
+        ACTIONS_RUNTIME_TOKEN: ""
+        SCAN: ${{ inputs.scan }}
+        BUILT: ${{ steps.image.outputs.build }}
+      run: |
+        set -uo pipefail
+        profile="$(jq -r .profile <<< "$SCAN")"
+        own=()
+        if [ "$BUILT" = true ]; then
+          for ref in $(jq -r '.["own-images"]' <<< "$SCAN"); do own+=(--own-image "$ref"); done
+        fi
+        status=0
+        "$RUNNER_TEMP/bin/scanctl" run --profile "$profile" \
+          --baseline .scanctl/baseline.sarif --dismiss-baseline "${own[@]}" \
+          --out scanctl.sarif --sbom sbom.cdx.json --summary scanctl-summary.md . || status=$?
+        if [ -f scanctl-summary.md ]; then cat scanctl-summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+        exit "$status"
+    - name: Upload SARIF to code scanning
+      # A private repository has no code scanning, so it skips the upload; the
+      # artifact and the pull request comment carry its findings. An event
+      # without a repository object uploads.
+      if: always() && github.event.repository.private != true
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4
+      with:
+        sarif_file: ws/${{ github.event.repository.name }}/scanctl.sarif
+        checkout_path: ${{ github.workspace }}/ws/${{ github.event.repository.name }}
+    - name: Upload SARIF and SBOM artifacts
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      with:
+        name: scanctl-results
+        path: |
+          ws/${{ github.event.repository.name }}/scanctl.sarif
+          ws/${{ github.event.repository.name }}/sbom.cdx.json
+        if-no-files-found: ignore
+    - name: Comment findings on the pull request
+      # One sticky comment per pull request, updated in place. Never fails the
+      # job.
+      if: always() && github.event_name == 'pull_request'
+      continue-on-error: true
+      shell: bash
+      working-directory: ws/${{ github.event.repository.name }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ACTIONS_RUNTIME_TOKEN: ""
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        marker="<!-- scanctl-summary -->"
+        { printf '%s\n\n' "$marker"; cat scanctl-summary.md; } > "$RUNNER_TEMP/comment.md"
+        id="$(gh api "repos/$REPO/issues/$PR/comments" \
+          --jq "map(select(.body | startswith(\"$marker\"))) | .[0].id // empty")"
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" >/dev/null
+        else
+          gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@"$RUNNER_TEMP/comment.md" >/dev/null
+        fi

@@ -4,13 +4,15 @@ name: pr
 # ci.yml holds the triggers and calls this file with its runner label; its
 # .github/checks.yml names the checks (README.md, "Shared PR workflow").
 #
-# plan reads checks.yml as data into a matrix and reuses an earlier success of
-# the same tree; check runs each entry with bash ci/run <name>, or the
-# contracts gates for the entry named gates; gate is the one status a branch
-# rule requires. The CI code comes from this repository at the commit the
-# caller pins (job.workflow_sha), checked out under .catena-ci: a "./" action
-# resolves against the caller's workspace. The gate scripts and every other
-# sibling come from the caller's .github/catenahq.lock.
+# plan reads checks.yml as data into a matrix and the scan settings, and
+# reuses an earlier success of the same tree; check runs each entry with bash
+# ci/run <name>, or the contracts gates for the entry named gates; scan runs
+# scanctl on a push or pull request and scan-daily on a scheduled run; gate is
+# the one status a branch rule requires. The CI code comes from this
+# repository at the commit the caller pins (job.workflow_sha), checked out
+# under .catena-ci: a "./" action resolves against the caller's workspace. The
+# gate scripts and every other sibling come from the caller's
+# .github/catenahq.lock; scanctl comes from this repository's lock.
 
 on:
   workflow_call:
@@ -31,6 +33,10 @@ jobs:
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       run: ${{ steps.tree.outputs.run }}
+      # scan is the JSON the scan action reads; scan-run is whether a scan job
+      # runs: checks.yml has a scan key and the tree is not reused.
+      scan: ${{ steps.matrix.outputs.scan }}
+      scan-run: ${{ steps.matrix.outputs.scan-enabled == 'true' && steps.tree.outputs.run == 'true' }}
     steps:
       - name: Check out the caller
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -54,12 +60,14 @@ jobs:
         working-directory: ws/${{ github.event.repository.name }}
         env:
           RUNNER_LABEL: ${{ inputs.runner }}
-        # The siblings of every entry join the same-tree key.
+        # The siblings of every entry and of the scan join the same-tree key.
         run: |
-          matrix="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --runner "$RUNNER_LABEL")"
-          echo "$matrix" | jq .
-          siblings="$(jq -r '[.include[].sib | to_entries[] | select(.value != "") | "catenahq/" + .key] | unique | join(" ")' <<< "$matrix")"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          plan="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --runner "$RUNNER_LABEL")"
+          echo "$plan" | jq .
+          siblings="$(jq -r '[(.include[].sib, .scan.sib) | to_entries[] | select(.value != "") | "catenahq/" + .key] | unique | join(" ")' <<< "$plan")"
+          echo "matrix=$(jq -c '{include}' <<< "$plan")" >> "$GITHUB_OUTPUT"
+          echo "scan=$(jq -c .scan <<< "$plan")" >> "$GITHUB_OUTPUT"
+          echo "scan-enabled=$(jq -r .scan.enabled <<< "$plan")" >> "$GITHUB_OUTPUT"
           echo "siblings=$siblings" >> "$GITHUB_OUTPUT"
       - name: Same tree
         id: tree
@@ -208,11 +216,88 @@ jobs:
           CHECK: ${{ matrix.name }}
         run: bash ci/run "$CHECK"
 
+  scan:
+    # scanctl over the caller's tree and own images (.github/actions/scan).
+    needs: plan
+    if: needs.plan.outputs.scan-run == 'true' && github.event_name != 'schedule'
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      security-events: write # code-scanning upload (public repositories)
+      pull-requests: write # the sticky findings comment
+    steps:
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - uses: ./.catena-ci/.github/actions/scan
+        with:
+          scan: ${{ needs.plan.outputs.scan }}
+
+  scan-daily:
+    # The scan of a scheduled run: image pulls log in to Docker Hub with the
+    # caller's environment ci when it holds DOCKERHUB_USERNAME and
+    # DOCKERHUB_TOKEN, and a failure opens the issue labelled scan, or comments
+    # on the open one.
+    needs: plan
+    if: needs.plan.outputs.scan-run == 'true' && github.event_name == 'schedule'
+    runs-on: ${{ inputs.runner }}
+    environment:
+      name: ci
+      deployment: false
+    permissions:
+      contents: read
+      security-events: write # code-scanning upload (public repositories)
+      pull-requests: write # the sticky findings comment
+      issues: write # the scan issue
+    steps:
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - name: Docker Hub login
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "environment ci holds no Docker Hub login: images are pulled anonymously"
+            exit 0
+          fi
+          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+      - uses: ./.catena-ci/.github/actions/scan
+        with:
+          scan: ${{ needs.plan.outputs.scan }}
+      - name: Open or update the scan issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          number="$(gh issue list --repo "$REPO" --label scan --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body "The scheduled scan failed again: $RUN_URL"
+            exit 0
+          fi
+          if ! gh api "repos/$REPO/labels/scan" --silent; then
+            gh label create scan --repo "$REPO" --description "The scheduled scan failed"
+          fi
+          gh issue create --repo "$REPO" --label scan --title "The scheduled scan failed" \
+            --body "The scheduled scan failed: $RUN_URL. The run's summary lists the findings; later failures comment here."
+
   gate:
-    # The required status: a draft, a plan that did not succeed, or a check
-    # that ended other than success or skipped fails it. A reused result skips
-    # every check and passes.
-    needs: [plan, check]
+    # The required status: a draft, a plan that did not succeed, or a check or
+    # scan that ended other than success or skipped fails it. A reused result
+    # skips every check and scan and passes.
+    needs: [plan, check, scan, scan-daily]
     if: ${{ !cancelled() }}
     runs-on: ${{ inputs.runner }}
     permissions: {}
@@ -222,6 +307,8 @@ jobs:
           DRAFT: ${{ github.event.pull_request.draft }}
           PLAN: ${{ needs.plan.result }}
           CHECK: ${{ needs.check.result }}
+          SCAN: ${{ needs.scan.result }}
+          SCAN_DAILY: ${{ needs.scan-daily.result }}
         run: |
           if [ "$DRAFT" = true ]; then
             echo "::error::a draft pull request does not pass the gate; mark it ready for review"
@@ -231,10 +318,14 @@ jobs:
             echo "::error::plan: $PLAN"
             exit 1
           fi
-          case "$CHECK" in
-            success | skipped) echo "plan: $PLAN; checks: $CHECK" ;;
-            *)
-              echo "::error::checks: $CHECK"
-              exit 1
-              ;;
-          esac
+          status=0
+          for job in "checks: $CHECK" "scan: $SCAN" "scan-daily: $SCAN_DAILY"; do
+            case "${job#*: }" in
+              success | skipped) echo "$job" ;;
+              *)
+                echo "::error::$job"
+                status=1
+                ;;
+            esac
+          done
+          exit "$status"

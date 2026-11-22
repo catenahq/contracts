@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Reads the caller's .github/checks.yml and .github/catenahq.lock, from the
-// current directory, and prints the matrix the shared PR workflow
-// (.github/workflows/pr.yml) runs its checks from, as one line of JSON:
+// current directory, and prints the plan of the shared PR workflow
+// (.github/workflows/pr.yml) as one line of JSON: "include", the matrix its
+// checks run from, and "scan", the settings of its scan jobs.
 //
 //   node ../contracts/scripts/ci/checks-matrix.mjs --runner <label>
 //
 // --runner is the label of every check that names no runs-on (the workflow's
 // runner input). checks.yml is data: a key or tool the parser does not know
-// fails, with the key named. Every entry carries every tool, sibling and gate
-// key, so no workflow expression reads a missing one. A sibling's value is the
+// fails, with the key named. Every entry, and the scan, carries every key, so
+// no workflow expression reads a missing one. A sibling's value is the
 // checkout's fetch depth, "bundle" for one fetched with a token, or empty when
 // the check does not use it. README.md, "Shared PR workflow", gives the file.
 
@@ -17,11 +18,15 @@ import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
 const OWNER = "catenahq";
-// Each sibling has its own checkout step in pr.yml.
+// Each sibling has its own checkout step in pr.yml and in .github/actions/scan.
 export const SIBLINGS = ["catena-admin", "catena-ce", "catena-templates", "contracts", "docs", "ops"];
 const CHECK_KEYS = ["runs-on", "timeout-minutes", "tools", "siblings", "inputs", "go-cache"];
 const GATE_KEYS = ["core-app-names", "duplication"];
+const SCAN_KEYS = ["profile", "own-images", "image-inputs", "siblings", "tools"];
+// The profiles scanctl run takes.
+const SCAN_PROFILES = ["full", "sellable"];
 const SIBLING_KEYS = ["fetch-depth", "token"];
+const TOOL_KEYS = ["node", "uv", "go", "staticcheck"];
 const TIMEOUT_DEFAULT = 20;
 // The Node major the contracts gates run on.
 const GATES_NODE = "26";
@@ -60,10 +65,10 @@ export function declaredSecrets(workflowText) {
   return isMap(secrets) ? Object.keys(secrets) : [];
 }
 
-function tools(where, value) {
+function tools(where, value, allowed = TOOL_KEYS) {
   const out = { node: "", uv: "", go: "", staticcheck: "", "staticcheck-sha256": "" };
   if (value === undefined) return out;
-  keysOf(where, value, ["node", "uv", "go", "staticcheck"]);
+  keysOf(where, value, allowed);
   for (const t of ["node", "uv"]) {
     if (value[t] === undefined) continue;
     if (typeof value[t] !== "string" || !EXACT.test(value[t])) {
@@ -165,12 +170,36 @@ function checkEntry(name, value, locked, secrets, runner) {
   };
 }
 
-// The matrix of checks.yml (text), given the lock (text), the secret names
-// pr.yml declares and the default runner label. Throws an Error naming the
-// key on anything it refuses.
+// The settings of the scan jobs; enabled is false when checks.yml has no scan
+// key. own-images is space-separated, as the scan action reads it.
+function scanEntry(value, locked, secrets) {
+  const s = value === undefined || value === null ? {} : keysOf("scan", value, SCAN_KEYS);
+  const profile = s.profile ?? "full";
+  if (!SCAN_PROFILES.includes(profile)) fail(`scan.profile must be one of ${SCAN_PROFILES.join(", ")}`);
+  const own = s["own-images"] ?? [];
+  if (!Array.isArray(own) || own.some((r) => typeof r !== "string" || !/^\S+$/.test(r))) {
+    fail("scan.own-images must be a list of image refs");
+  }
+  if (own.length > 0 && s["image-inputs"] === undefined) {
+    fail("scan.own-images needs image-inputs, the git pathspecs the images are built from");
+  }
+  inputs("scan.image-inputs", s["image-inputs"]);
+  return {
+    enabled: value !== undefined,
+    profile,
+    "own-images": own.join(" "),
+    "image-inputs": s["image-inputs"] ?? [],
+    sib: siblings("scan.siblings", s.siblings, locked, secrets),
+    tools: { go: tools("scan.tools", s.tools, ["go"]).go },
+  };
+}
+
+// The plan of checks.yml (text), given the lock (text), the secret names
+// pr.yml declares and the default runner label: the matrix include list and
+// the scan settings. Throws an Error naming the key on anything it refuses.
 export function buildMatrix({ checks, lock, secrets, runner }) {
   if (typeof runner !== "string" || runner === "") fail("--runner needs a runner label");
-  const doc = keysOf(".github/checks.yml", parse(checks) ?? {}, ["gates", "checks"]);
+  const doc = keysOf(".github/checks.yml", parse(checks) ?? {}, ["gates", "checks", "scan"]);
   const locked = lockedRepos(lock);
   const include = [];
   if (doc.gates !== undefined) include.push(gatesEntry(doc.gates, locked, runner));
@@ -181,7 +210,7 @@ export function buildMatrix({ checks, lock, secrets, runner }) {
     }
   }
   if (include.length === 0) fail(".github/checks.yml names no gates and no check");
-  return { include };
+  return { include, scan: scanEntry(doc.scan, locked, secrets) };
 }
 
 function main(argv) {
