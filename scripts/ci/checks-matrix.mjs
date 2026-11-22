@@ -135,11 +135,13 @@ function siblings(where, value, locked, secrets, allowed = SIBLING_KEYS) {
   return out;
 }
 
+// The git pathspecs a check reads; default the whole tree.
 function inputs(where, value) {
-  if (value === undefined) return;
+  if (value === undefined) return ["."];
   if (!Array.isArray(value) || value.length === 0 || value.some((p) => typeof p !== "string" || p === "")) {
     fail(`${where} must be a list of git pathspecs`);
   }
+  return value;
 }
 
 function gatesEntry(value, locked, runner) {
@@ -157,6 +159,7 @@ function gatesEntry(value, locked, runner) {
     "runs-on": runner,
     timeout: TIMEOUT_DEFAULT,
     "go-cache": false,
+    inputs: ["."],
     tools: { ...tools("gates", undefined), node: GATES_NODE },
     sib: { ...siblings("gates", undefined, locked, []), contracts: "1" },
     gates: { "core-app-names": args ?? [], duplication: g.duplication ?? false },
@@ -174,7 +177,7 @@ function checkEntry(name, value, locked, secrets, runner, repo) {
   if (!Number.isInteger(timeout) || timeout < 1 || timeout > 360) fail(`${where}.timeout-minutes must be 1 to 360`);
   const goCache = c["go-cache"] ?? false;
   if (typeof goCache !== "boolean") fail(`${where}.go-cache must be true or false`);
-  inputs(`${where}.inputs`, c.inputs);
+  const paths = inputs(`${where}.inputs`, c.inputs);
   const sib = siblings(`${where}.siblings`, c.siblings, locked, secrets);
   const sibs = Object.keys(sib).filter((s) => sib[s] !== "");
   const toolset = tools(`${where}.tools`, c.tools, { repo, sibs });
@@ -184,6 +187,7 @@ function checkEntry(name, value, locked, secrets, runner, repo) {
     "runs-on": runsOn,
     timeout,
     "go-cache": goCache,
+    inputs: paths,
     tools: toolset,
     sib,
     gates: { "core-app-names": [], duplication: false },

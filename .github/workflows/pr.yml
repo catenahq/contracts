@@ -4,11 +4,11 @@ name: pr
 # ci.yml holds the triggers and calls this file with its runner label; its
 # .github/checks.yml names the checks (README.md, "Shared PR workflow").
 #
-# plan reads checks.yml as data into a matrix and the scan settings, and
-# reuses an earlier success of the same tree; check runs each entry with bash
-# ci/run <name>, or the contracts gates for the entry named gates; scan runs
-# scanctl on a push or pull request and scan-daily on a scheduled run; gate is
-# the one status a branch rule requires. The CI code comes from this
+# plan reads checks.yml as data into a matrix and the scan settings, and drops
+# each entry, and the scan, that an earlier run passed with the same key; check
+# runs each entry with bash ci/run <name>, or the contracts gates for the entry
+# named gates; scan runs scanctl on a push or pull request and scan-daily on a
+# scheduled run; gate is the one status a branch rule requires. The CI code comes from this
 # repository at the commit the caller pins (job.workflow_sha), checked out
 # under .catena-ci: a "./" action resolves against the caller's workspace. The
 # gate scripts and every other sibling come from the caller's
@@ -34,15 +34,16 @@ jobs:
   plan:
     runs-on: ${{ inputs.runner }}
     permissions:
-      contents: read
-      actions: read # same-tree reads the runs and artifacts of the caller
+      contents: read # the caller, and the head commit of each run whose record reuse checks
+      actions: read # reuse reads the runs, jobs and artifacts of the caller
     outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
-      run: ${{ steps.tree.outputs.run }}
+      # The entries that run: those with no reused record.
+      matrix: ${{ steps.reuse.outputs.matrix }}
+      run: ${{ steps.reuse.outputs.run }}
       # scan is the JSON the scan action reads; scan-run is whether a scan job
-      # runs: checks.yml has a scan key and the tree is not reused.
+      # runs: checks.yml has a scan key and the scan is not reused.
       scan: ${{ steps.matrix.outputs.scan }}
-      scan-run: ${{ steps.matrix.outputs.scan-enabled == 'true' && steps.tree.outputs.run == 'true' }}
+      scan-run: ${{ steps.matrix.outputs.scan-enabled == 'true' && steps.reuse.outputs.scan-reused != 'true' }}
       # The commit of each bundled sibling, {"<repo>":"<sha>"}.
       bundle-shas: ${{ steps.bundle.outputs.bundle-shas }}
     steps:
@@ -50,6 +51,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           path: ws/${{ github.event.repository.name }}
+          fetch-depth: 2 # with HEAD^2, the pull request head: reuse fetches no head it holds
           persist-credentials: false
       - name: Check out the CI code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -71,13 +73,11 @@ jobs:
           REPO: ${{ github.event.repository.name }}
           PRIVATE: ${{ github.event.repository.private }}
           HAS_TOKEN: ${{ secrets.CATENA_EE_READ_TOKEN != '' }}
-        # The siblings of every entry and of the scan join the same-tree key.
         # A bundle travels as an artifact, which anyone who can read a public
         # repository can download, so only a private caller bundles.
         run: |
           plan="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --repo "$REPO" --runner "$RUNNER_LABEL")"
           echo "$plan" | jq .
-          siblings="$(jq -r '[(.include[].sib, .scan.sib) | to_entries[] | select(.value != "") | "catenahq/" + .key] | unique | join(" ")' <<< "$plan")"
           bundles="$(jq -c '[.include[].sib | to_entries[] | select(.value == "bundle") | .key] | unique' <<< "$plan")"
           if [ "$bundles" != '[]' ] && [ "$PRIVATE" != true ]; then
             echo "::error::a check reads a sibling with a token, and its bundle would be an artifact of this public repository"
@@ -87,25 +87,30 @@ jobs:
             echo "::error::a check reads a sibling with CATENA_EE_READ_TOKEN: pass it under secrets in the job that calls pr.yml"
             exit 1
           fi
-          echo "matrix=$(jq -c '{include}' <<< "$plan")" >> "$GITHUB_OUTPUT"
+          echo "plan=$plan" >> "$GITHUB_OUTPUT"
           echo "scan=$(jq -c .scan <<< "$plan")" >> "$GITHUB_OUTPUT"
           echo "scan-enabled=$(jq -r .scan.enabled <<< "$plan")" >> "$GITHUB_OUTPUT"
-          echo "siblings=$siblings" >> "$GITHUB_OUTPUT"
-          echo "bundles=$bundles" >> "$GITHUB_OUTPUT"
-      - name: Same tree
-        id: tree
-        uses: ./.catena-ci/.github/actions/same-tree
-        with:
-          siblings: ${{ steps.matrix.outputs.siblings }}
-          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
-          wait-minutes: '0'
-          sibling-token: ${{ secrets.CATENA_EE_READ_TOKEN || github.token }}
-      # A sibling a check reads as a bundle: fetched with the token at the
-      # caller's lock, bundled at the commit checked out, and uploaded for
-      # check. One step per sibling the matrix parser knows (SIBLINGS in
+      # Drops each entry, and the scan, whose key an earlier run recorded as
+      # passed; a scheduled run looks nothing up. A failed lookup fails the
+      # step (README.md, "Per-check reuse").
+      - name: Reuse
+        id: reuse
+        working-directory: ws/${{ github.event.repository.name }}
+        env:
+          PLAN: ${{ steps.matrix.outputs.plan }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          SIBLING_TOKEN: ${{ secrets.CATENA_EE_READ_TOKEN || github.token }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/reuse.mjs" plan --matrix "$PLAN" --repo "$REPO"
+      # A sibling an entry that runs reads as a bundle: fetched with the token
+      # at the caller's lock, bundled at the commit checked out, and uploaded
+      # for check. One step per sibling the matrix parser knows (SIBLINGS in
       # scripts/ci/checks-matrix.mjs).
       - name: Fetch sibling catena-admin
-        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'catena-admin')
+        if: contains(fromJSON(steps.reuse.outputs.bundles), 'catena-admin')
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/catena-admin
@@ -114,7 +119,7 @@ jobs:
           token: ${{ secrets.CATENA_EE_READ_TOKEN }}
           fetch-depth: '0'
       - name: Fetch sibling catena-ce
-        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'catena-ce')
+        if: contains(fromJSON(steps.reuse.outputs.bundles), 'catena-ce')
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/catena-ce
@@ -123,7 +128,7 @@ jobs:
           token: ${{ secrets.CATENA_EE_READ_TOKEN }}
           fetch-depth: '0'
       - name: Fetch sibling catena-templates
-        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'catena-templates')
+        if: contains(fromJSON(steps.reuse.outputs.bundles), 'catena-templates')
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/catena-templates
@@ -132,7 +137,7 @@ jobs:
           token: ${{ secrets.CATENA_EE_READ_TOKEN }}
           fetch-depth: '0'
       - name: Fetch sibling contracts
-        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'contracts')
+        if: contains(fromJSON(steps.reuse.outputs.bundles), 'contracts')
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/contracts
@@ -141,7 +146,7 @@ jobs:
           token: ${{ secrets.CATENA_EE_READ_TOKEN }}
           fetch-depth: '0'
       - name: Fetch sibling docs
-        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'docs')
+        if: contains(fromJSON(steps.reuse.outputs.bundles), 'docs')
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/docs
@@ -150,7 +155,7 @@ jobs:
           token: ${{ secrets.CATENA_EE_READ_TOKEN }}
           fetch-depth: '0'
       - name: Fetch sibling ops
-        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'ops')
+        if: contains(fromJSON(steps.reuse.outputs.bundles), 'ops')
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/ops
@@ -160,9 +165,9 @@ jobs:
           fetch-depth: '0'
       - name: Bundle the siblings
         id: bundle
-        if: steps.tree.outputs.run == 'true' && steps.matrix.outputs.bundles != '[]'
+        if: steps.reuse.outputs.bundles != '[]'
         env:
-          BUNDLES: ${{ steps.matrix.outputs.bundles }}
+          BUNDLES: ${{ steps.reuse.outputs.bundles }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sibling-bundles"
@@ -201,6 +206,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           path: ws/${{ github.event.repository.name }}
+          fetch-depth: 2 # the reuse record compares HEAD^2, the pull request head
           persist-credentials: false
       - name: Check out the CI code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -285,6 +291,11 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: ${{ matrix.tools.node }}
+      # The reuse record runs on Node; an entry that names none gets this one.
+      - if: matrix.tools.node == ''
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26"
       - if: matrix.tools.uv != ''
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
@@ -350,6 +361,16 @@ jobs:
           echo "$SHA256  staticcheck.tar.gz" | sha256sum -c -
           tar -xzf staticcheck.tar.gz
           echo "$RUNNER_TEMP/staticcheck" >> "$GITHUB_PATH"
+      # The key of this entry, computed before any code of the caller runs, and
+      # uploaded as its record once the check passed (README.md, "Per-check
+      # reuse"). A run: step holds no runtime token, so only the upload step
+      # below can upload.
+      - name: Reuse record
+        id: record
+        env:
+          ENTRY: ${{ toJSON(matrix) }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/reuse.mjs" record --entry "$ENTRY"
       # Pinned in contracts/.vale-version, which check-prose.mjs also reads and
       # enforces: the grammars decide which comments are visible.
       - name: Install vale
@@ -385,6 +406,18 @@ jobs:
         env:
           CHECK: ${{ matrix.name }}
         run: bash ci/run "$CHECK"
+      # Reached only when the check passed. A failed upload loses only the
+      # record: a later run of the same key runs the check again.
+      - name: Upload the reuse record
+        if: steps.record.outputs.record == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.record.outputs.name }}
+          path: ${{ steps.record.outputs.path }}
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: true
       # A scheduled run runs every check (a schedule never reuses a result), so
       # the daily run refreshes the cache. A failed check saves too: Go writes
       # only finished build outputs to its cache.
@@ -417,6 +450,29 @@ jobs:
       - uses: ./.catena-ci/.github/actions/scan
         with:
           scan: ${{ needs.plan.outputs.scan }}
+      # The scan's key, of the checkouts the scan action made, uploaded as its
+      # record (README.md, "Per-check reuse"). Reached only when the scan passed.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26"
+      - name: Reuse record
+        id: record
+        working-directory: ws/${{ github.event.repository.name }}
+        env:
+          SCAN: ${{ needs.plan.outputs.scan }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          ACTIONS_RUNTIME_TOKEN: ""
+        run: node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/reuse.mjs" record --scan "$SCAN"
+      - name: Upload the reuse record
+        if: steps.record.outputs.record == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.record.outputs.name }}
+          path: ${{ steps.record.outputs.path }}
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: true
 
   scan-daily:
     # The scan of a scheduled run: image pulls log in to Docker Hub with the
@@ -476,8 +532,9 @@ jobs:
 
   gate:
     # The required status: a draft, a plan that did not succeed, or a check or
-    # scan that ended other than success or skipped fails it. A reused result
-    # skips every check and scan and passes. On a pull request it then posts
+    # scan that ended other than success or skipped fails it. A reused entry
+    # leaves the matrix, and with none left check is skipped and passes, as
+    # does a reused scan. On a pull request it then posts
     # the commit status of the same name, pending while a Depends-on pull
     # request is open.
     needs: [plan, check, scan, scan-daily]

@@ -104,11 +104,12 @@ assert.deepEqual(
 assert.deepEqual(matrix("ci-runner"), {
   include: [
     {
-      name: "gates", "runs-on": "catena-ci", timeout: 20, "go-cache": false,
+      name: "gates", "runs-on": "catena-ci", timeout: 20, "go-cache": false, inputs: ["."],
       tools: { ...NO_TOOLS, node: "26" }, sib: { ...NO_SIB, contracts: "1" }, gates: NO_GATES,
     },
     {
       name: "python", "runs-on": "catena-ci", timeout: 20, "go-cache": false,
+      inputs: ["src/", "tests/", "pyproject.toml", "uv.lock", ".python-version"],
       tools: { ...NO_TOOLS, uv: "0.13.9" }, sib: NO_SIB, gates: NO_GATES,
     },
   ],
@@ -126,7 +127,7 @@ assert.deepEqual(matrix("ci-runner"), {
   });
   assert.deepEqual(gates.gates, { "core-app-names": ["--exclude", "central/", "."], duplication: true });
   assert.deepEqual(go, {
-    name: "go", "runs-on": "catena-ci", timeout: 40, "go-cache": true,
+    name: "go", "runs-on": "catena-ci", timeout: 40, "go-cache": true, inputs: ["."],
     tools: { ...NO_TOOLS, go: "go.mod", "go-file": "ws/catena-admin/go.mod" },
     sib: { ...NO_SIB, "catena-ce": "0", "catena-templates": "1", contracts: "1" },
     gates: NO_GATES,
@@ -139,6 +140,8 @@ assert.deepEqual(matrix("ci-runner"), {
     checks: "checks:\n  go:\n    runs-on: ubuntu-26.04\n", lock: "", secrets: [], runner: "catena-ci", repo: "catena-admin",
   });
   assert.equal(own.include[0]["runs-on"], "ubuntu-26.04");
+  assert.deepEqual(own.include[0].inputs, ["."], "a check that names no inputs reads the whole tree");
+  assert.deepEqual(staticcheck.inputs, ["*.go", "**/*.go", "go.mod", "go.sum"]);
 }
 
 // ops: a token sibling needs the secret declared in pr.yml; declared, it is a bundle.
