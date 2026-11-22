@@ -163,7 +163,15 @@ try {
   // read-only token; the update is written with GH_TOKEN.
   const privateDep = { pulls: [pr(1, dep)], get: { ...gate(1), ...pull("catenahq/ops", 12, MERGED) }, tokens: { "repos/catenahq/ops/": "read" } };
   expectUpdated("read token", exec(privateDep, { env: { GH_READ_TOKEN: "read" } }), [1]);
-  assert.equal(exec(privateDep).status, 1, "a dependency GH_TOKEN cannot read is an error");
+  // GitHub answers 404 for a pull request the token cannot see: never updated.
+  expectUpdated("no read token", exec(privateDep), [], ["main: skip #1: dependency not found: catenahq/ops#12"]);
+  // A Depends-on in a repository CI does not know, or that does not exist, skips
+  // its candidate alone; an unreadable one too, and the run then exits 1.
+  skipped("unknown repository", pr(1, { body: "Depends-on: catenahq/nope#1" }), gate(1), "unknown repository: catenahq/nope#1");
+  skipped("dependency not found", pr(1, dep), gate(1), "dependency not found: catenahq/ops#12");
+  const unread = exec({ pulls: [pr(1, dep), pr(2), pr(3, { base: "release" })], get: { ...gate(1), ...gate(2), ...gate(3) }, fail: ["ops/pulls/12"] });
+  expectUpdated("unreadable dependency", unread, [2, 3], ["main: skip #1: not judged", "release: updated #3"], 1);
+  assert.ok(unread.err.includes("::error::update: main: #1 not judged: gh api repos/catenahq/ops/pulls/12 failed"), unread.err);
 
   // Each base on its own: one update on main and one on release.
   expectUpdated("release base", exec({ pulls: [pr(1), pr(2, { base: "release" }), pr(3, { base: "release" })], get: { ...gate(1), ...gate(2), ...gate(3) } }), [1, 2], [
@@ -210,18 +218,47 @@ try {
   assert.equal(pushed.status, 0, pushed.err);
   assert.equal(pushed.writes.length, 0);
 
+  // Each pull request on its own: a repository CI does not know and a
+  // dependency that does not exist fail that one's status; one that cannot be
+  // recomputed is reported, the next ones still recomputed, and the run exits 1.
+  const bodies = {
+    1: "Depends-on: catenahq/nope#1",
+    2: "Depends-on: catenahq/ops#404",
+    3: "Depends-on: catenahq/ops#12",
+    4: "Depends-on: catenahq/docs#5",
+  };
+  const each = {
+    pulls: Object.entries(bodies).map(([x, b]) => pr(Number(x), { state: "BLOCKED", auto: false, body: b })),
+    get: {
+      ...Object.fromEntries(Object.entries(bodies).flatMap(([x, b]) => Object.entries({ ...gate(Number(x)), ...pull(REPO, Number(x), { body: b }) }))),
+      ...pull("catenahq/docs", 5, MERGED),
+    },
+    fail: ["ops/pulls/12"],
+  };
+  const recomputed = exec(each, { event: "schedule" });
+  assert.equal(recomputed.status, 1, recomputed.err);
+  assert.deepEqual(
+    recomputed.writes.map((w) => [w.path, w.state, w.description]),
+    [
+      [`repos/${REPO}/statuses/${head(1)}`, "failure", "unknown repository: catenahq/nope#1"],
+      [`repos/${REPO}/statuses/${head(2)}`, "failure", "dependency not found: catenahq/ops#404"],
+      [`repos/${REPO}/statuses/${head(4)}`, "success", "no open dependency"],
+    ],
+  );
+  assert.ok(recomputed.err.includes("::error::update: #3: ci / gate not recomputed: gh api repos/catenahq/ops/pulls/12 failed"), recomputed.err);
+  assert.ok(recomputed.summary.includes("- update failed: #3: ci / gate not recomputed"), recomputed.summary);
+
   // A GitHub API error exits 1 and updates nothing: a failed query is never "no candidate".
   const ready = { pulls: [pr(1)], get: gate(1) };
   for (const [label, state, opts] of [
     ["check runs", { ...ready, fail: ["check-runs"] }],
     ["pr list", { ...ready, fail: [`pr list ${REPO}`] }],
     ["app-tests status", ready, { args: ["--apps"] }],
-    ["Depends-on pull request", { pulls: [pr(1, dep)], get: gate(1) }],
     ["status recompute", { ...open, fail: [`pulls/1`] }, { event: "schedule" }],
   ]) {
     const got = exec(state, opts);
     assert.equal(got.status, 1, `${label}: exit ${got.status}\n${got.err}`);
-    assert.ok(got.err.includes("::error::update: gh "), `${label}\n${got.err}`);
+    assert.match(got.err, /::error::update: (.*: )?gh (api|pr) /, label);
     assert.equal(got.writes.filter((w) => w.method === "PUT").length, 0, label);
   }
 

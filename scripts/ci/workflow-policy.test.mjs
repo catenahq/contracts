@@ -340,23 +340,15 @@ try {
   const fetched = run(fetchArgs, fetchState);
   assert.equal(fetched.status, 0, fetched.err);
   const read = (path) => readFileSync(join(out, path), "utf-8");
-  // The pull request's own zizmor directive is dropped; the caller's
-  // ci-control.yml ignores dangerous-triggers on both trigger lines zizmor
-  // reports.
+  // The pull request's own zizmor directive is dropped, and nothing is added:
+  // scanctl's zizmor configuration ignores dangerous-triggers for ci-control.yml.
   assert.deepEqual(
-    [read("pr/.github/workflows/ci.yml"), read("pr/.github/catenahq.lock"), read("pr/docs/a b.md"), read("base/.github/workflows/ci.yml")],
-    ["head: ci # dropped-zizmor-directive: ignore[unpinned-uses]\n", "head lock\n", "doc\n", "base ci\n"],
+    [
+      read("pr/.github/workflows/ci.yml"), read("pr/.github/workflows/ci-control.yml"), read("pr/.github/catenahq.lock"), read("pr/docs/a b.md"),
+      read("base/.github/workflows/ci.yml"),
+    ],
+    ["head: ci # dropped-zizmor-directive: ignore[unpinned-uses]\n", CALLER, "head lock\n", "doc\n", "base ci\n"],
   );
-  assert.equal(
-    read("pr/.github/workflows/ci-control.yml"),
-    CALLER.replace("  pull_request_target:\n", "  pull_request_target: # zizmor: ignore[dangerous-triggers]\n")
-      .replace("  workflow_run:\n", "  workflow_run: # zizmor: ignore[dangerous-triggers]\n"),
-  );
-  // Another shape ignores nothing.
-  const otherShape = CALLER + JOB("extra", "    permissions: {}\n    steps:\n      - run: echo extra\n");
-  const reshaped = run(fetchArgs, { ...fetchState, raw: { ...fetchState.raw, [raw(HEAD, ".github/workflows/ci-control.yml")]: otherShape } });
-  assert.equal(reshaped.status, 0, reshaped.err);
-  assert.equal(read("pr/.github/workflows/ci-control.yml"), otherShape);
   for (const gone of ["pr/.github/link", "pr/old", "base/.github/actions"]) assert.ok(!existsSync(join(out, gone)), gone);
   assert.equal(JSON.parse(read("changed.json")).length, 102);
 

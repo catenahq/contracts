@@ -213,6 +213,17 @@ jobs:
           node-version: "26.13.1"
       - name: Install the YAML parser
         run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      # Before the pull request head is checked out: no step that runs after
+      # tools read the head uses the App's key.
+      - name: Mint a read-only token of the repositories the pull request names
+        id: read-token
+        uses: ./.catena-ci/.github/actions/read-token
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          pull-request: ${{ github.event.workflow_run.pull_requests[0].number }}
+          base: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
+          head: ${{ github.event.workflow_run.head_sha }}
       - name: Check out the base
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -270,15 +281,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPS_TOKEN: ${{ steps.app-token.outputs.token }}
         run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-dispatch.sh"
-      - name: Mint a read-only token of the repositories the pull request names
-        id: read-token
-        uses: ./.catena-ci/.github/actions/read-token
-        with:
-          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
-          pull-request: ${{ github.event.workflow_run.pull_requests[0].number }}
-          base: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
-          head: ${{ github.event.workflow_run.head_sha }}
       - name: Post the commit status ci / gate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -486,15 +488,16 @@ jobs:
       - name: Install the YAML parser
         if: steps.app.outputs.enabled == 'true'
         run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
-      - name: Mint a read-only policy App token of the repositories the pull request names
-        # The rule merged compares their commits.
+      - name: Mint a read-only policy App token of the repositories the lock files name
+        # The rule merged compares their commits; the policy reads no
+        # Depends-on pull request.
         if: steps.app.outputs.enabled == 'true'
         id: read-token
         uses: ./.catena-ci/.github/actions/read-token
         with:
           client-id: ${{ secrets.POLICY_APP_CLIENT_ID }}
           private-key: ${{ secrets.POLICY_APP_PRIVATE_KEY }}
-          pull-request: ${{ github.event.pull_request.number }}
+          locks-only: "true"
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
       - name: Fetch the pull request's files

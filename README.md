@@ -477,6 +477,10 @@ ignored). It posts the whole state on every call, so the newest post is right:
   status of the sha is a failure or error;
 - `failure` (`ci / gate check run <conclusion>`) when the check run completed
   with anything but success;
+- `failure` (`unknown repository: catenahq/<repo>#<n>`) when a line names a
+  repository CI does not know, one with no ceiling key in
+  `scripts/ci/workflow-policy.json` (in any case), before any dependency is
+  read;
 - `pending`, `waiting for catenahq/<repo>#<n>` for the first named pull request
   that is open, or `catenahq/<repo>#<n> closed without merging` for one closed
   unmerged (it can reopen); a pull request counts once its `merged_at` is set;
@@ -497,7 +501,10 @@ from that answer, the script posts `failure` naming both and exits 1.
 A line that starts with `Depends-on:` and does not match the pattern is ignored
 with a warning on stderr. The dependencies are read with `GH_READ_TOKEN` when it
 is set, the read-only token of the repositories the pull request names (see
-"Control workflow"), else with `GH_TOKEN`. The description is cut at 140
+"Control workflow"), else with `GH_TOKEN`. That token reads private
+repositories, so a pull request from a fork in a public repository that names
+a private repository's pull request shows its state (waiting, closed without
+merging, merged) in its public commit status. The description is cut at 140
 characters, and `target_url` is the run's URL when `GITHUB_SERVER_URL`,
 `GITHUB_REPOSITORY` and `GITHUB_RUN_ID` are set. The script exits 1 on a GitHub
 API error, an unreadable dependency included, and 2 on bad arguments; with
@@ -639,12 +646,20 @@ jobs:
       version: ${{ inputs.version }}
 ```
 
-`pull_request_target` and `workflow_run` run the file of the base branch, never
-the pull request's code: every job loads the CI code from contracts at
+`pull_request_target` and `workflow_run` run the file of the default branch,
+never the pull request's code: every job loads the CI code from contracts at
 `job.workflow_sha` under `.catena-ci/`, and only `dispatch` checks the pull
 request out, as data its tools read (see "App dispatch"). The workflow declares
 no secret: the CI App's are those of the caller's environment `ci`, the
 policy App's those of its environment `workflow-policy`.
+
+An environment's deployment branch rule is matched against the run's
+`GITHUB_REF`, which on `pull_request_target`, `workflow_run` and `schedule` is
+the default branch, `main`, whatever the pull request's base; on `push` it is
+the pushed branch and on `workflow_dispatch` the branch dispatched. So `ci`
+admits the branch `main`, and `release` too in a repository with
+`release: true`, where `update` runs on a push to `release`;
+`workflow-policy` admits `main` alone.
 
 Every App token that writes covers the caller's repository alone (`dispatch`'s
 covers ops alone). A read of another repository (a Depends-on pull request, a
@@ -652,10 +667,15 @@ first-party commit the policy compares) takes a second token,
 `.github/actions/read-token`: contents and pull requests read, for the
 repositories `scripts/ci/read-scope.mjs` lists. Those are the caller's and every
 catenahq repository that the lock files at the pull request's base and head
-commits and its body's Depends-on lines name, each once, or for the updater
-those the Depends-on lines of every open pull request name; more than 15 fail
-the job. The scripts read with it as `GH_READ_TOKEN` and write with `GH_TOKEN`.
-`scripts/ci/read-scope.test.mjs` drives the list with a `gh` stub on `PATH`.
+commits and its body's Depends-on lines name, each once, for `policy` those the
+lock files name, or for the updater those the Depends-on lines of every open
+pull request name; more than 15 fail the job. A repository CI does not know,
+one with no ceiling key in `scripts/ci/workflow-policy.json`, is left out with
+a warning, since the App mints no token when one name does not resolve; the
+pull request that names it gets the `ci / gate` status `failure` (see "Gate
+status"). The scripts read with it as `GH_READ_TOKEN` and write with
+`GH_TOKEN`. `scripts/ci/read-scope.test.mjs` drives the list with a `gh` stub
+on `PATH`.
 
 | Input | Meaning |
 | --- | --- |
@@ -717,8 +737,10 @@ its open pull requests with auto-merge on, oldest first:
   candidate is tried, and the run fails once every base is done.
 - Every other candidate is skipped with its reason printed: `DIRTY`, any other
   merge state (`not behind its base (<state>)`), draft, no gate check run, a
-  gate check run going or not successful, app-tests not passed, the first open
-  Depends-on.
+  gate check run going or not successful, app-tests not passed, a Depends-on
+  in a repository CI does not know, a Depends-on pull request that does not
+  exist (a 404), the first open Depends-on. A candidate whose reads fail
+  otherwise is skipped as `not judged` and reported like a failed update.
 
 The updater trusts the `ci / gate` check run of GitHub Actions, the result of
 the checks. The commit status of the same name, which `gate-status.mjs` posts,
@@ -736,10 +758,15 @@ repository gets its status recomputed, waiting for app-tests with `--apps`.
 That is how a merged Depends-on pull request reaches its dependents, in any
 repository: each repository's hourly run recomputes its own, so a merge
 reaches them within the hour, and a newer updater run that replaced a waiting
-one is caught up the same way.
+one is caught up the same way. Each pull request is recomputed on its own: a
+Depends-on pull request that does not exist posts `failure` (`dependency not
+found: catenahq/<repo>#<n>`), and a pull request whose reads fail otherwise is
+reported like a failed update while the next one is recomputed.
 
-A GitHub API error exits 1 and nothing after it runs: a failed query never
-reads as "no candidate". Bad arguments exit 2. `scripts/ci/update.test.mjs`
+A failed listing of the open pull requests, or a failed read of the check run
+of a candidate that is up to date, exits 1 at once, and a failed update or
+read of one pull request at the end of the run: a failed query never reads as
+"no candidate". Bad arguments exit 2. `scripts/ci/update.test.mjs`
 drives the script with a `gh` stub on `PATH` and payloads shaped as GitHub
 returns them, under `scripts/ci/fixtures/update/`.
 
@@ -787,7 +814,9 @@ nothing of it runs. `scripts/ci/app-dispatch.sh` then:
   pull request number.
 
 The job then posts the `ci / gate` status with `gate-status.mjs --app-tests`,
-reading the dependencies with the read-only token.
+reading the dependencies with the read-only token. That token is minted before
+the base and the head are checked out, so no step that runs after the tools
+read the head uses the App's key.
 A GitHub API or git error fails the step: a failed read is never "no verdict".
 
 ### App tag
@@ -874,15 +903,15 @@ validated before use; inputs reach the script through `env:` only.
 
 The `policy` job of `control.yml` judges what a pull request makes CI run. It
 runs in the caller's environment `workflow-policy` (`deployment: false`),
-whose branch rule admits `main` and `release`, the bases a pull request
-targets, and which holds the policy App's `POLICY_APP_CLIENT_ID` and
+whose branch rule admits `main` (see "Control workflow"), and which holds the
+policy App's `POLICY_APP_CLIENT_ID` and
 `POLICY_APP_PRIVATE_KEY`, with `contents: read` and `pull-requests: read`. When
 `POLICY_APP_CLIENT_ID` is empty it prints a notice and posts nothing. Otherwise
 it mints a policy App token for this repository alone (contents and pull
 requests read, statuses write) and a read-only policy App token of the
-repositories the pull request names (see "Control workflow"), for the
-comparisons of the rule `merged`, loads `scripts/ci/workflow-policy.mjs` from
-contracts at `job.workflow_sha`, and:
+repositories the lock files at the base and head name (see "Control
+workflow"), for the comparisons of the rule `merged`, loads
+`scripts/ci/workflow-policy.mjs` from contracts at `job.workflow_sha`, and:
 
 - `fetch` writes every file under `.github/` and every file the pull request
   changes, as they are at its head, into `$RUNNER_TEMP/policy/pr/`, the
@@ -892,14 +921,14 @@ contracts at `job.workflow_sha`, and:
   and nothing of it runs. A symbolic link under `.github/` is left out;
   a pull request of 3000 files or more fails, past what the API lists. In the
   copies of the workflows and actions every inline `# zizmor:` directive is
-  dropped, so the pull request suppresses no finding, and a `ci-control.yml`
-  of the caller shape (rule `ci-control`) gets `# zizmor:
-  ignore[dangerous-triggers]` on its `pull_request_target:` and
-  `workflow_run:` lines, each of which zizmor reports: the caller runs on
-  those triggers by design;
+  dropped, so the pull request suppresses no finding;
 - scanctl, built by `.github/actions/scanctl`, runs zizmor alone over
-  `$RUNNER_TEMP/policy/pr/` (`scripts/ci/workflow-policy-scanctl.yml`), its
-  summary in the job summary;
+  `$RUNNER_TEMP/policy/pr/` (`scripts/ci/workflow-policy-scanctl.yml` picks the
+  tool), its summary in the job summary. scanctl passes zizmor its own bundled
+  zizmor configuration, which ignores `dangerous-triggers` for every file named
+  `ci-control.yml`, whatever its shape: the caller runs on
+  `pull_request_target` and `workflow_run` by design. The rule `ci-control`
+  bounds what that ignore covers;
 - `check` runs the rules below, writes the job summary and posts the commit
   status `workflow policy` on the head with the App token: `success`, or
   `failure` with the rules that failed. A step that fails before the verdict

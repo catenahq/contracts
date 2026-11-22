@@ -220,10 +220,22 @@ try {
   assert.equal(unreadable.status, 1, "an unreadable checks.yml is an error");
   assert.equal(unreadable.posts.length, 0);
 
+  // A repository CI does not know (none of workflow-policy.json) fails, before
+  // any dependency is read and in any case: a typo never waits.
+  for (const args of [[], ["--gate-job"], ["--app-tests", "--pend-unreadable"]]) {
+    expectPost(
+      `unknown repository ${args}`,
+      exec({ ...body("Depends-on: catenahq/ops#12", "Depends-on: catenahq/Nope#1"), [STATUS]: { statuses: [status("app-tests", "success")] } }, { args, fail: ["ops/pulls"] }),
+      "failure",
+      "unknown repository: catenahq/Nope#1",
+    );
+  }
+  expectPost("known in another case", exec({ ...body("Depends-on: catenahq/OPS#12"), "repos/catenahq/OPS/pulls/12": pull("") }), "pending", "waiting for catenahq/OPS#12");
+
   // The description is cut at 140 characters.
   const long = "r".repeat(150);
-  const cut = exec({ ...body(`Depends-on: catenahq/${long}#1`), [`repos/catenahq/${long}/pulls/1`]: pull("") });
-  assert.equal(cut.posts[0].description, `waiting for catenahq/${long}#1`.slice(0, 140));
+  const cut = exec(body(`Depends-on: catenahq/${long}#1`));
+  assert.equal(cut.posts[0].description, `unknown repository: catenahq/${long}#1`.slice(0, 140));
   assert.equal(cut.posts[0].description.length, 140);
 
   // target_url is the run's URL when the environment names it, else omitted.
