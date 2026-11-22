@@ -235,6 +235,8 @@ name: ci
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: '17 6 * * *'
 permissions: {}
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
@@ -242,28 +244,55 @@ concurrency:
 jobs:
   ci:
     uses: catenahq/contracts/.github/workflows/pr.yml@<40-hex sha> # <branch>
-    permissions: {contents: read, actions: read}
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+      pull-requests: write
+      issues: write
     with: {runner: catena-ci}
 ```
 
-The input `runner` is the label of `plan`, `gate` and every check that names
-no `runs-on`. Three jobs run:
+GitHub refuses to start a run whose called jobs ask for a permission the caller
+does not grant, so the caller grants every permission a job of `pr.yml` asks
+for, a scan job's included, whether or not the scan runs.
 
-- `plan` checks the caller out under `ws/<repo>` and contracts at
-  `job.workflow_sha` (the commit the caller pins) under `.catena-ci/`, then
-  turns the caller's `.github/checks.yml` into a matrix with
-  `scripts/ci/checks-matrix.mjs` and runs same-tree (`wait-minutes: 0`) with
-  every sibling the matrix names and the caller's lock. A reused success sets
-  `run` to `false`.
-- `check (<name>)`, one per matrix entry, when `run` is `true`: the caller and
-  `.catena-ci/` again, each sibling the entry names through checkout-sibling at
-  the caller's lock, the entry's tools, then `bash ci/run <name>` in
+The input `runner` is the label of `plan`, `gate`, the scan jobs and every
+check that names no `runs-on`. These jobs run:
+
+- `plan` checks the caller out under `ws/<repo>` (two commits deep) and
+  contracts at `job.workflow_sha` (the commit the caller pins) under
+  `.catena-ci/`, turns the caller's `.github/checks.yml` into a matrix with
+  `scripts/ci/checks-matrix.mjs`, and drops each entry, and the scan, that an
+  earlier run passed with the same key (see "Per-check reuse"). Its output
+  `matrix` holds the entries left, `run` is `false` when none is left, `scan`
+  is the scan settings (JSON) and `scan-run` is `true` when checks.yml has a
+  `scan` key and the scan is not reused. It also bundles each private sibling
+  an entry left names (see "Private siblings").
+- `check (<name>)`, one per matrix entry, when `run` is `true`: the caller (two
+  commits deep) and `.catena-ci/` again, each sibling the entry names through
+  checkout-sibling at the caller's lock, or from its bundle, the entry's tools
+  (Node 26 when it names no Node), the reuse record, then `bash ci/run <name>` in
   `ws/<repo>`. The entry `gates` runs the contracts gates of the locked
   contracts checkout instead: unicode, repo rules and whole-tree prose always,
   the core-app-name gate with its arguments, jscpd 4.3.0 with `duplication`.
+  An entry with `go-cache: true` restores the Go build and module caches
+  after setting up Go: key `go-<hash of go.sum>-<run id>-<run attempt>`,
+  restored by the prefixes `go-<hash>-` and `go-`, where the `go.sum` is the
+  one beside the go file (`ws/<repo>/go.sum`, or `ws/<sibling>/go.sum` for
+  `go: <sibling>/go.mod`, and `ws/<repo>/go.sum` for an exact version). A
+  build cache over 3 GiB is emptied before the check runs. Only a `schedule`
+  run saves the caches, after the check, whether it passed or not; a
+  `schedule` run never reuses a result, so the daily run runs every check and
+  refreshes the cache, and a pull request or push run only restores. A check
+  that passed uploads its reuse record.
+- `scan`, when `scan-run` is `true` on any event but `schedule`, and
+  `scan-daily`, when it is `true` on `schedule`, run scanctl (see "Scan"). A
+  `scan` that passed uploads its reuse record; `scan-daily` records nothing.
 - `gate` is the status a branch rule requires. It runs unless the run is
   cancelled and fails on a draft pull request, on a `plan` that did not
-  succeed, or on a `check` result other than success or skipped.
+  succeed, or on a `check`, `scan` or `scan-daily` result other than success
+  or skipped.
 
 `.github/checks.yml` is data; the parser fails on any key it does not know and
 names it:
@@ -276,37 +305,167 @@ checks:
   go:                        # bash ci/run go
     runs-on: catena-ci       # default: the runner input
     timeout-minutes: 40      # default 20
-    tools: {go: go.mod}      # node, uv: exact; go: go.mod or exact; staticcheck: {version, sha256}
-    siblings: {catena-ce: {fetch-depth: 0}, contracts: {}}
+    tools: {go: go.mod}      # node, uv: exact; go: go.mod, <sibling>/go.mod or exact; staticcheck: {version, sha256}
+    siblings: {catena-ce: {fetch-depth: 0}, contracts: {}}   # or {token: CATENA_EE_READ_TOKEN}
     inputs: [.]              # git pathspecs the check reads
-    go-cache: true
+    go-cache: true           # restore the Go caches; the scheduled run saves them
+scan:                        # absent: no scan
+  profile: full              # full (default) or sellable, passed to scanctl run --profile
+  own-images: [catena-admin:ci]   # built by bash ci/run image; needs image-inputs
+  image-inputs: [Dockerfile, go.mod, go.sum, scanctl.yml, .scanctl/]   # git pathspecs
+  siblings: {catena-ce: {fetch-depth: 0}}   # what ci/run image reads
+  tools: {go: go.mod}        # go only
 ```
 
 A sibling is one of `catena-admin`, `catena-ce`, `catena-templates`,
 `contracts`, `docs` and `ops`, and needs a line in the caller's lock; `gates`
-needs the contracts line. A sibling's `token` must name a secret `pr.yml`
-declares in `on.workflow_call.secrets`, and it declares none. No check may be
-named `gates`.
+needs the contracts line. A check sibling's `token` must name a secret `pr.yml`
+declares in `on.workflow_call.secrets`: `CATENA_EE_READ_TOKEN`. A scan sibling
+takes no `token`. A check's `go: <sibling>/go.mod` needs that sibling in the
+check's `siblings`. A check with `go-cache: true` needs `tools.go`. No check may
+be named `gates`.
 
-The matrix is one line of JSON. Each entry carries every tool, sibling and gate
-key; a sibling's value is its fetch depth, or empty when the check does not use
-it:
+The parser prints one line of JSON: `include`, the matrix, and `scan`. Each
+entry carries `inputs` (`["."]` when the check names none, and for `gates`)
+and every tool, sibling and gate key; a sibling's value is its fetch
+depth, `bundle` for one with a `token`, or empty when the check does not use
+it. `go-file` is the go.mod setup-go reads, `ws/<repo>/go.mod` for `go.mod`
+and `ws/<sibling>/go.mod` for `<sibling>/go.mod`, empty for an exact version.
+`scan` carries every key too, with `enabled` false when checks.yml has none,
+and `own-images` joined by spaces:
 
 ```json
-{"include":[{"name":"go","runs-on":"catena-ci","timeout":40,"go-cache":true,
-  "tools":{"node":"","uv":"","go":"go.mod","staticcheck":"","staticcheck-sha256":""},
+{"include":[{"name":"go","runs-on":"catena-ci","timeout":40,"go-cache":true,"inputs":["."],
+  "tools":{"node":"","uv":"","go":"go.mod","go-file":"ws/catena-admin/go.mod","staticcheck":"","staticcheck-sha256":""},
   "sib":{"catena-admin":"","catena-ce":"0","catena-templates":"","contracts":"1","docs":"","ops":""},
-  "gates":{"core-app-names":[],"duplication":false}}]}
+  "gates":{"core-app-names":[],"duplication":false}}],
+ "scan":{"enabled":true,"profile":"full","own-images":"catena-admin:ci","image-inputs":["Dockerfile"],
+  "sib":{"catena-admin":"","catena-ce":"0","catena-templates":"","contracts":"","docs":"","ops":""},
+  "tools":{"go":"go.mod"}}}
 ```
 
-Run the parser from a caller's checkout to see its matrix:
+Run the parser from a caller's checkout to see its plan; `--repo` is the
+caller's repository name:
 
-    node ../contracts/scripts/ci/checks-matrix.mjs --runner catena-ci
+    node ../contracts/scripts/ci/checks-matrix.mjs --repo catena-admin --runner catena-ci
 
 It needs `npm ci --prefix scripts/ci` once (npm `yaml`, locked in
 `scripts/ci/`, outside the package consumers link).
 `scripts/ci/checks-matrix.test.mjs` runs it over the checks of ci-runner,
-catena-admin and ops and each key it refuses.
+catena-admin and ops, their scan settings, and each key it refuses.
+
+### Per-check reuse
+
+`scripts/ci/reuse.mjs` lets a run skip each check, and the scan, that an
+earlier run passed on the same inputs. The key of an entry is the sha256 of
+these lines:
+
+- `entry=<the matrix entry as JSON, keys sorted>` (the scan settings for the
+  scan);
+- `tree=<git diff-tree -r <empty tree> HEAD -- <inputs> .github/checks.yml
+  .github/catenahq.lock ci/run>`: every file the check reads, with its mode
+  and blob, at the merge commit; the scan's inputs are `.`. `diff-tree` reads
+  git pathspecs, globs included;
+- `sib:<repo>=<commit>` for each sibling the entry names, sorted;
+- `workflow=<job.workflow_sha>`;
+- `date=<UTC yyyy-mm-dd>` for the scan, whose findings follow the
+  vulnerability feed.
+
+The record of a key is an artifact named `ci-check.<name>.<first 40 hex of the
+key's sha256>` holding the key, kept 30 days.
+
+`node reuse.mjs plan --matrix <parser output> --repo <owner/name>` runs in
+`plan`. It resolves each sibling's commit as checkout-sibling does
+(`resolve.sh`: the branch of the run's name, else the lock's commit) and lists
+the artifacts of each record name, newest first. A record counts when it is
+not expired; its run is of this repository and not a fork's, is not this run,
+ran `.github/workflows/ci.yml` on `pull_request` or `schedule`, and names
+`pr.yml` at this commit in its `referenced_workflows`; its job `ci / check
+(<name>)` (`ci / scan` for the scan) concluded success; and the inputs at the
+run's head commit, fetched by sha when the checkout lacks it, equal ours. Any
+run of the repository can upload an artifact of any name, so the record alone
+proves nothing. A counted record drops the entry, prints `reused <name> from
+<url>` and writes it to the job summary. The outputs are `matrix` (the entries
+left), `run` (`false` when none is left), `bundles` (the bundle siblings of the
+entries left) and `scan-reused`. A `schedule` run looks nothing up and runs
+every entry. A GitHub API or git error fails the step: a failed lookup is
+never read as "no record".
+
+`node reuse.mjs record --entry <entry>` runs in `check` before any code of the
+caller, and `record --scan <scan settings>` in `scan` after the scan action. It
+computes the key from the checkouts, the caller's and each sibling's beside
+it, and writes it to a file. On a pull request it sets `record` only when the
+merge commit's inputs equal those of the pull request head (`HEAD^2`), the
+commit a later lookup compares; other events always record. Once the check
+or the scan passed, an `upload-artifact` step uploads the file under the
+record name; a `run:` step holds no runtime token, so only that step uploads.
+
+A pull request whose base moved runs again only the checks whose inputs the
+base change touched. `scripts/ci/reuse.test.mjs` drives the script over
+scratch repositories with a `gh` stub on `PATH` and a `git` stub that answers
+`ls-remote` and runs git for the rest.
+
+### Private siblings
+
+A check reads a private sibling without holding a token. Its checks.yml names
+the sibling with `token: CATENA_EE_READ_TOKEN`, and the caller passes the
+secret:
+
+```yaml
+jobs:
+  ci:
+    uses: catenahq/contracts/.github/workflows/pr.yml@<40-hex sha> # <branch>
+    secrets:
+      CATENA_EE_READ_TOKEN: ${{ secrets.CATENA_EE_READ_TOKEN }}
+```
+
+`plan` is the one job that receives the secret, and it runs none of the
+caller's code. For each such sibling an entry left after reuse names, it checks
+the sibling out through checkout-sibling with the token at the caller's lock
+(`fetch-depth: 0`), writes `git bundle create <repo>.bundle HEAD`, and uploads
+the bundles as the artifact `sibling-bundles`, kept 1 day. Its output
+`bundle-shas` maps each bundled sibling to its commit
+(`{"catena-admin":"<sha>"}`). Reuse reads the siblings' branches with the same
+token. A check that names a bundle sibling downloads the artifact, runs
+`git clone --no-checkout` of the sibling's bundle into `ws/<repo>`, and checks
+the recorded commit out detached.
+
+`plan` fails when a check names a bundle sibling and the caller passes no
+secret, or the caller is a public repository: anyone who can read a public
+repository can download its artifacts.
+
+### Scan
+
+`scan` and `scan-daily` check contracts out under `.catena-ci/` at
+`job.workflow_sha` and run `.github/actions/scan` with the plan's `scan`
+output. The action:
+
+- checks the caller out under `ws/<repo>` with its whole history, and each
+  sibling of `scan.siblings` at the caller's lock;
+- builds scanctl with `.github/actions/scanctl` at the commit of the
+  `catenahq/scanctl` line of this repository's `.github/catenahq.lock`, read
+  from `.catena-ci/`; in catenahq/scanctl it builds the caller's own checkout;
+- sets up uv 0.13.9 for the Python scanners, and Go when `scan.tools` names it;
+- with `own-images`, runs `bash ci/run image` in `ws/<repo>` on a scheduled
+  run, or when `git diff --name-only HEAD^1 HEAD -- <image-inputs>` is not
+  empty; GitHub's cache service is exposed for that build, and later steps
+  blank its token;
+- runs `scanctl run --profile <profile> --baseline .scanctl/baseline.sarif
+  --dismiss-baseline`, with `--own-image <ref>` for each own image it built;
+- uploads the SARIF to code scanning on a public repository, the SARIF and
+  SBOM as the artifact `scanctl-results`, and on a pull request writes the
+  summary into one comment it updates in place.
+
+`scan` grants `contents: read`, `security-events: write` and
+`pull-requests: write`. `scan-daily` adds `issues: write` and runs in the
+caller's environment `ci` (`deployment: false`): with `DOCKERHUB_USERNAME`
+and `DOCKERHUB_TOKEN` there, image pulls log in to Docker Hub. A failed
+`scan-daily` opens an issue labelled `scan`, or comments on the open one.
+No scan job receives `CATENA_EE_READ_TOKEN`.
+
+`.github/actions/scanctl` builds scanctl into `$RUNNER_TEMP/bin/scanctl` with
+`go build`: `sha` checks catenahq/scanctl out under `.scanctl-src`, `self:
+'true'` builds `ws/scanctl`. Go comes from the go.mod of the tree it builds.
 
 ## How to change a contract
 

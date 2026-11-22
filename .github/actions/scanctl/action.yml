@@ -1,0 +1,43 @@
+name: scanctl
+description: >-
+  Build scanctl into $RUNNER_TEMP/bin/scanctl: catenahq/scanctl at the commit
+  sha, checked out under .scanctl-src, or with self the scanctl checkout under
+  ws/scanctl. Go comes from the go.mod of the tree it builds.
+
+inputs:
+  sha:
+    description: The catenahq/scanctl commit to build (40 hex digits). Unused with self.
+    default: ''
+  self:
+    description: "'true' builds the checkout under ws/scanctl: a run in catenahq/scanctl scans with its own code."
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Check the commit
+      if: inputs.self != 'true'
+      shell: bash
+      env:
+        SHA: ${{ inputs.sha }}
+      run: |
+        if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::scanctl: sha '$SHA' is not a 40-hex commit"
+          exit 1
+        fi
+    - name: Check out scanctl
+      if: inputs.self != 'true'
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      with:
+        repository: catenahq/scanctl
+        ref: ${{ inputs.sha }}
+        path: .scanctl-src
+        persist-credentials: false
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      with:
+        go-version-file: ${{ inputs.self == 'true' && 'ws/scanctl/go.mod' || '.scanctl-src/go.mod' }}
+        cache: false
+    - name: Build scanctl
+      shell: bash
+      working-directory: ${{ inputs.self == 'true' && 'ws/scanctl' || '.scanctl-src' }}
+      run: go build -o "$RUNNER_TEMP/bin/scanctl" ./cmd/scanctl
