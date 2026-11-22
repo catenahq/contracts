@@ -42,7 +42,7 @@ CI checks this repo out with `.github/actions/checkout-sibling`, which
 every workflow uses for every cross-repo checkout: no workflow resolves
 a sibling's branch on its own. A `uses:` line is read before expressions
 are evaluated, so first-party actions and reusable workflows are named
-`@main`, except `pr.yml`, which a caller pins by commit; that is the only
+`@main`, except `pr.yml` and `control.yml`, which a caller pins by commit; that is the only
 branch name a workflow holds outside its `on:` triggers and run conditions,
 unless it is a release channel listed in `BRANCH_ALLOW`
 (`scripts/check-repo-rules.mjs`).
@@ -64,7 +64,9 @@ unless it is a release channel listed in `BRANCH_ALLOW`
 | `.github/catenahq.lock` | The scanctl commit the scan builds, `catenahq/scanctl <sha> # main`. |
 | `scripts/ci/checks-matrix.mjs` | The parser `plan` runs with the caller's `--repo` and `--runner`: the matrix and the scan settings. A key it does not know fails, named; a sibling with a `token` is a `bundle`, and a scan sibling takes none. npm `yaml` is locked in `scripts/ci/package-lock.json`; a sibling or tool `pr.yml` gains is added to both, and a sibling to the scan action too. |
 | `scripts/ci/reuse.mjs` | Per-check reuse in `pr.yml`: `plan` keys each entry and the scan on its inputs at the merge commit, its siblings' commits, `pr.yml`'s commit and, for the scan, the date, and drops those a passing run of the same key recorded; `record` computes the key in `check` and `scan` for the upload after a pass. A failed lookup fails the step (README.md, "Per-check reuse"). |
-| `scripts/ci/gate-status.mjs` | Computes and posts the commit status `ci / gate` of a pull request head: pending while a `Depends-on: catenahq/<repo>#<n>` pull request of its body is not merged, with `--app-tests` also while the `app-tests` status is not success (README.md, "Gate status"). The `gate` job of `pr.yml` runs it on a pull request. |
+| `scripts/ci/gate-status.mjs` | Computes and posts the commit status `ci / gate` of a pull request head: pending while a `Depends-on: catenahq/<repo>#<n>` pull request of its body is not merged, with `--app-tests` also while the `app-tests` status is not success (README.md, "Gate status"). The `gate` job of `pr.yml` runs it on a pull request, the `depends` job of `control.yml` on each `pull_request_target` event, and `update.mjs` imports it. |
+| `.github/workflows/control.yml` | The shared workflow a caller's `ci-control.yml` calls for the jobs that run from the protected branch: `depends` posts the commit status `ci / gate` on each `pull_request_target` event; `update` mints the CI App token in the caller's environment `ci` and runs `scripts/ci/update.mjs`, one run per repository at a time. It loads its code at `job.workflow_sha` and never checks out a pull request (README.md, "Control workflow"). |
+| `scripts/ci/update.mjs` | The updater: per base (`main`, `release`), updates the oldest auto-merge pull request that is behind, passed the `ci / gate` check run and waits for nothing, unless an up-to-date one is still being checked; on push and schedule it recomputes the `ci / gate` status of the pull requests with a Depends-on line naming a merged one, waiting for app-tests in another repository whose `.github/checks.yml` at the head has the key `apps`. A failed query exits 1 (README.md, "Control workflow"). |
 | `scripts/sync-brand-assets.mjs` | Copies the logo into the consuming site's `public/favicon.svg`. Each site's `postinstall`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
 | `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |

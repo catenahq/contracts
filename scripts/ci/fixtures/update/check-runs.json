@@ -1,0 +1,14 @@
+{
+  "check_runs": [
+    {
+      "app": { "slug": "github-actions" },
+      "completed_at": "2026-11-21T22:04:52Z",
+      "conclusion": "success",
+      "head_sha": "ec55747bb459467769e0aae659ea37824b8e9c5e",
+      "name": "ci / gate",
+      "started_at": "2026-11-21T22:04:29Z",
+      "status": "completed"
+    }
+  ],
+  "total_count": 1
+}

@@ -1,0 +1,126 @@
+name: control
+
+# The shared workflow of the jobs that run from a repository's protected
+# branch. A caller's ci-control.yml holds the triggers and calls this file
+# (README.md, "Control workflow").
+#
+# depends posts the commit status ci / gate of a pull request on each of its
+# pull_request_target events, so an edited Depends-on line counts at once.
+# update brings the oldest ready auto-merge pull request of each base up to
+# date with it, one at a time, and on a push recomputes the status of the open
+# pull requests that depend on the one merged. Both load the CI code from this
+# repository at the commit the caller pins (job.workflow_sha) and never check
+# out the caller's pull request.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label of every job.
+        type: string
+        required: true
+      apps:
+        description: The ci / gate status and the updater also wait for the app-tests status.
+        type: boolean
+        default: false
+      release:
+        description: The repository is released from the release branch.
+        type: boolean
+        default: false
+      step:
+        description: The release step a dispatch runs.
+        type: string
+        default: ""
+      version:
+        description: The version a dispatch releases.
+        type: string
+        default: ""
+
+permissions: {}
+
+jobs:
+  depends:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read # the CI code
+      statuses: write # the commit status ci / gate
+      pull-requests: read # the pull request body and the pull requests it depends on
+    steps:
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.13.1"
+      - name: Post the commit status ci / gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          APPS: ${{ inputs.apps }}
+        run: |
+          args=(--repo "$REPO" --pr "$PR" --sha "$SHA")
+          if [ "$APPS" = true ]; then args+=(--app-tests); fi
+          node .catena-ci/scripts/ci/gate-status.mjs "${args[@]}"
+
+  update:
+    if: >-
+      github.event_name == 'push' || github.event_name == 'workflow_run' || github.event_name == 'schedule' ||
+      (github.event_name == 'pull_request_target' && github.event.action == 'auto_merge_enabled')
+    runs-on: ${{ inputs.runner }}
+    # The CI App's client id and private key are secrets of the caller's
+    # environment ci.
+    environment:
+      name: ci
+      deployment: false
+    # One updater per repository at a time: a running one is never
+    # cancelled, and a newer run replaces the one waiting.
+    concurrency:
+      group: update-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: read # the CI code
+    steps:
+      - name: Mint a CI App token
+        # Every repository the App is installed on: a dependent pull request
+        # can be in any of them. update-branch needs contents write on the
+        # head repository.
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-statuses: write
+          permission-checks: read
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.13.1"
+      - name: Install the YAML parser
+        run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      - name: Update the next pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+          APPS: ${{ inputs.apps }}
+        run: |
+          args=(--repo "$REPO" --event "$EVENT" --sha "$SHA")
+          if [ "$APPS" = true ]; then args+=(--apps); fi
+          node .catena-ci/scripts/ci/update.mjs "${args[@]}"

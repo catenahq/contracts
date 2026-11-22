@@ -467,9 +467,10 @@ run's URL when `GITHUB_SERVER_URL`, `GITHUB_REPOSITORY` and `GITHUB_RUN_ID` are
 set. The script exits 1 on a GitHub API error, an unreadable dependency
 included, and 2 on bad arguments.
 
-The `gate` job runs it on `pull_request` only, with `contents: read`,
-`statuses: write` and `pull-requests: read`. `scripts/ci/gate-status.test.mjs`
-drives it with a `gh` stub on `PATH`.
+The `gate` job runs it on `pull_request`, and the `depends` job of
+`control.yml` on each `pull_request_target` event (see "Control workflow"),
+both with `contents: read`, `statuses: write` and `pull-requests: read`.
+`scripts/ci/gate-status.test.mjs` drives it with a `gh` stub on `PATH`.
 
 ### Scan
 
@@ -503,6 +504,118 @@ No scan job receives `CATENA_EE_READ_TOKEN`.
 `.github/actions/scanctl` builds scanctl into `$RUNNER_TEMP/bin/scanctl` with
 `go build`: `sha` checks catenahq/scanctl out under `.scanctl-src`, `self:
 'true'` builds `ws/scanctl`. Go comes from the go.mod of the tree it builds.
+
+### Control workflow
+
+`.github/workflows/control.yml` is the reusable workflow of the jobs that run
+from a repository's protected branch. A repository has two caller files:
+`ci.yml` calls `pr.yml` for the pull request checks, and `ci-control.yml`
+calls `control.yml`:
+
+```yaml
+name: ci-control
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review, auto_merge_enabled]
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  push:
+    branches: [main, release]
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:        # release repositories only
+    inputs:
+      step: {type: choice, options: [cut, tag, merge-back], required: true}
+      version: {type: string, required: true}
+permissions: {}
+jobs:
+  control:
+    uses: catenahq/contracts/.github/workflows/control.yml@<40-hex sha> # <branch>
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      statuses: write
+      pull-requests: read
+    with:
+      runner: catena-ci
+      apps: false
+      release: false
+      step: ${{ inputs.step }}
+      version: ${{ inputs.version }}
+```
+
+`pull_request_target` runs the file of the base branch, never the pull
+request's code: no job checks the pull request out, and both load the CI code
+from contracts at `job.workflow_sha` under `.catena-ci/`. The workflow declares
+no secret.
+
+| Input | Meaning |
+| --- | --- |
+| `runner` | Required. The runner label of every job. |
+| `apps` | `true`: the `ci / gate` status and the updater also wait for the `app-tests` status. Default `false`. |
+| `release` | `true` for a repository released from its `release` branch. Default `false`; no job reads it. |
+| `step`, `version` | The release step and version of a `workflow_dispatch` run. Default empty; no job reads them. |
+
+- `depends` runs on `pull_request_target` and posts the commit status `ci /
+  gate` of the pull request head with `gate-status.mjs` (`--app-tests` with
+  `apps`), with `contents: read`, `statuses: write` and `pull-requests: read`.
+  An edited body changes the status at once, without a new check run.
+- `update` runs on `push`, `workflow_run`, `schedule` and on
+  `pull_request_target` of type `auto_merge_enabled`, in the caller's
+  environment `ci` (`deployment: false`). It mints a token of the CI App from
+  the environment's `RENOVATE_APP_CLIENT_ID` and `RENOVATE_APP_PRIVATE_KEY` for
+  every repository the App is installed on, with contents and pull requests
+  write, statuses write and checks read, and runs `scripts/ci/update.mjs` with
+  it. Its concurrency group is `update-<owner/name>` without
+  `cancel-in-progress`: one updater runs per repository, and a newer run
+  replaces the one waiting.
+
+The job runs the updater with the token as `GH_TOKEN`:
+
+    node update.mjs --repo <owner/name> --event <name> [--sha <pushed commit>] [--apps]
+
+On every event, for each of the bases `main` and `release`, the candidates are
+its open pull requests with auto-merge on, oldest first:
+
+- When a candidate that is not `BEHIND` or `DIRTY` has its `ci / gate` check
+  run queued or in progress, nothing is updated: that one merges next, and
+  another updated now would fall behind again at its merge.
+- Otherwise the oldest candidate that is not a draft, is `BEHIND`, has a `ci /
+  gate` check run of GitHub Actions that succeeded on its head, with `--apps`
+  has a newest `app-tests` status of `success`, and has no open Depends-on
+  pull request, is updated with `PUT repos/<r>/pulls/<n>/update-branch` and
+  `expected_head_sha` set to the head it read. The update pushes a commit, so
+  `ci` runs again on it and its `workflow_run` runs the updater again.
+- Every other candidate is skipped with its reason printed: `DIRTY`, any other
+  merge state (`not behind its base (<state>)`), draft, no gate check run, a
+  gate check run going or not successful, app-tests not passed, the first open
+  Depends-on.
+
+The updater trusts the `ci / gate` check run of GitHub Actions, the result of
+the checks. The commit status of the same name, which `gate-status.mjs` posts,
+carries the Depends-on and app-tests verdicts, and the updater reads those
+from their sources itself. A check run of another App is ignored: any App
+with checks write can create a check run of any name.
+
+On `push`, each pull request merged as the pushed commit (`repos/<r>/commits/<sha>/pulls`
+with `merge_commit_sha` equal to it) is looked up with `gh search prs --owner
+<owner> --state open --match body "Depends-on: <owner/name>#<n>"`; each hit
+whose body has that Depends-on line gets its `ci / gate` status recomputed and
+posted, as `gate-status.mjs` does. It waits for app-tests (`--app-tests`) for
+a pull request of this repository with `--apps`, and for one of another
+repository whose `.github/checks.yml` at the pull request head, read through
+the contents API and parsed as data, has the key `apps`; a 404 means no
+checks.yml and no app-tests, and any other failed read fails the run. The job
+installs the npm `yaml` of `scripts/ci/` for that parse. The search index lags, so on `schedule` every
+open pull request of this repository with a Depends-on line gets its status
+recomputed too; the caller's hourly schedule bounds the delay.
+
+A GitHub API error exits 1 and nothing after it runs: a failed query never
+reads as "no candidate". Bad arguments exit 2. `scripts/ci/update.test.mjs`
+drives the script with a `gh` stub on `PATH` and payloads shaped as GitHub
+returns them, under `scripts/ci/fixtures/update/`.
 
 ## How to change a contract
 

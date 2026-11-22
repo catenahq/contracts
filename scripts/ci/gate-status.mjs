@@ -18,7 +18,7 @@ const DEPENDS = /^Depends-on: (catenahq\/[A-Za-z0-9._-]+)#([1-9][0-9]*)$/;
 
 export class ApiError extends Error {}
 
-function gh(args) {
+export function gh(args) {
   const r = spawnSync("gh", args, { encoding: "utf-8" });
   if (r.error || r.status !== 0) {
     throw new ApiError(`gh ${args.slice(0, 2).join(" ")} failed: ${(r.error?.message ?? r.stderr).trim()}`);
@@ -26,7 +26,7 @@ function gh(args) {
   return r.stdout;
 }
 
-const get = (path) => JSON.parse(gh(["api", path]));
+export const get = (path) => JSON.parse(gh(["api", path]));
 
 // The dependencies of a pull request body, and the lines that look like one
 // and are not.
@@ -43,7 +43,7 @@ export function parseDependsOn(body) {
 }
 
 // pending with the reason of the first dependency not merged, else null.
-function unmetDependency(deps) {
+export function unmetDependency(deps) {
   for (const { repo, number } of deps) {
     const pr = get(`repos/${repo}/pulls/${number}`);
     if (pr.merged_at) continue;
@@ -54,7 +54,7 @@ function unmetDependency(deps) {
 }
 
 // The newest app-tests status of the sha: its state, or null when it has none.
-function appTestsState(repo, sha) {
+export function appTestsState(repo, sha) {
   const combined = get(`repos/${repo}/commits/${sha}/status?per_page=100`);
   return (combined.statuses ?? []).find((s) => s.context === "app-tests")?.state ?? null;
 }

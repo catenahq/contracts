@@ -1,0 +1,19 @@
+[
+  {
+    "autoMergeRequest": {
+      "authorEmail": null,
+      "commitBody": null,
+      "commitHeadline": null,
+      "enabledAt": "2026-11-17T12:16:22Z",
+      "enabledBy": { "is_bot": true, "login": "app/catenahq-renovate" },
+      "mergeMethod": "SQUASH"
+    },
+    "baseRefName": "main",
+    "body": "",
+    "createdAt": "2026-11-17T12:16:21Z",
+    "headRefOid": "a3df6b4c5adf40c77c420eb43e51df234fdfd499",
+    "isDraft": false,
+    "mergeStateStatus": "BLOCKED",
+    "number": 373
+  }
+]
