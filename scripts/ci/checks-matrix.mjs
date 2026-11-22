@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Reads the caller's .github/checks.yml and .github/catenahq.lock, from the
-// current directory, and prints the matrix the shared PR workflow
-// (.github/workflows/pr.yml) runs its checks from, as one line of JSON:
+// current directory, and prints the plan of the shared PR workflow
+// (.github/workflows/pr.yml) as one line of JSON: "include", the matrix its
+// checks run from, and "scan", the settings of its scan jobs.
 //
-//   node ../contracts/scripts/ci/checks-matrix.mjs --runner <label>
+//   node ../contracts/scripts/ci/checks-matrix.mjs --repo <name> --runner <label>
 //
+// --repo is the caller's repository name, checked out under ws/<name>;
 // --runner is the label of every check that names no runs-on (the workflow's
 // runner input). checks.yml is data: a key or tool the parser does not know
-// fails, with the key named. Every entry carries every tool, sibling and gate
-// key, so no workflow expression reads a missing one. A sibling's value is the
+// fails, with the key named. Every entry, and the scan, carries every key, so
+// no workflow expression reads a missing one. A sibling's value is the
 // checkout's fetch depth, "bundle" for one fetched with a token, or empty when
 // the check does not use it. README.md, "Shared PR workflow", gives the file.
 
@@ -17,17 +19,24 @@ import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
 const OWNER = "catenahq";
-// Each sibling has its own checkout step in pr.yml.
+// Each sibling has its own checkout step in pr.yml (check, and plan's bundle
+// fetch) and in .github/actions/scan.
 export const SIBLINGS = ["catena-admin", "catena-ce", "catena-templates", "contracts", "docs", "ops"];
 const CHECK_KEYS = ["runs-on", "timeout-minutes", "tools", "siblings", "inputs", "go-cache"];
 const GATE_KEYS = ["core-app-names", "duplication"];
+const SCAN_KEYS = ["profile", "own-images", "image-inputs", "siblings", "tools"];
+// The profiles scanctl run takes.
+const SCAN_PROFILES = ["full", "sellable"];
 const SIBLING_KEYS = ["fetch-depth", "token"];
+const TOOL_KEYS = ["node", "uv", "go", "staticcheck"];
 const TIMEOUT_DEFAULT = 20;
 // The Node major the contracts gates run on.
 const GATES_NODE = "26";
 const EXACT = /^\d+\.\d+\.\d+$/;
 const CHECK_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 const LOCK_LINE = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\s+[0-9a-f]{40}(\s+#.*)?$/;
+const REPO_NAME = /^[A-Za-z0-9_.-]+$/;
+const GO_SIBLING = /^([a-z-]+)\/go\.mod$/;
 
 const fail = (msg) => {
   throw new Error(msg);
@@ -60,10 +69,13 @@ export function declaredSecrets(workflowText) {
   return isMap(secrets) ? Object.keys(secrets) : [];
 }
 
-function tools(where, value) {
-  const out = { node: "", uv: "", go: "", staticcheck: "", "staticcheck-sha256": "" };
+// go-file is the go.mod setup-go reads: ws/<repo>/go.mod for go.mod, and
+// ws/<sibling>/go.mod for <sibling>/go.mod, which is allowed when sibs (the
+// siblings the entry declares) holds the name.
+function tools(where, value, { allowed = TOOL_KEYS, repo = "", sibs = null } = {}) {
+  const out = { node: "", uv: "", go: "", "go-file": "", staticcheck: "", "staticcheck-sha256": "" };
   if (value === undefined) return out;
-  keysOf(where, value, ["node", "uv", "go", "staticcheck"]);
+  keysOf(where, value, allowed);
   for (const t of ["node", "uv"]) {
     if (value[t] === undefined) continue;
     if (typeof value[t] !== "string" || !EXACT.test(value[t])) {
@@ -72,8 +84,17 @@ function tools(where, value) {
     out[t] = value[t];
   }
   if (value.go !== undefined) {
-    if (value.go !== "go.mod" && !(typeof value.go === "string" && EXACT.test(value.go))) {
-      fail(`${where}.go must be go.mod or an exact version such as 1.26.1`);
+    const sibling = sibs === null ? null : GO_SIBLING.exec(String(value.go));
+    if (value.go === "go.mod") {
+      out["go-file"] = `ws/${repo}/go.mod`;
+    } else if (sibling !== null && sibs.includes(sibling[1])) {
+      out["go-file"] = `ws/${sibling[1]}/go.mod`;
+    } else if (!(typeof value.go === "string" && EXACT.test(value.go))) {
+      fail(
+        sibs === null
+          ? `${where}.go must be go.mod or an exact version such as 1.26.1`
+          : `${where}.go must be go.mod, <sibling>/go.mod of a sibling the check declares, or an exact version such as 1.26.1`,
+      );
     }
     out.go = value.go;
   }
@@ -91,7 +112,7 @@ function tools(where, value) {
   return out;
 }
 
-function siblings(where, value, locked, secrets) {
+function siblings(where, value, locked, secrets, allowed = SIBLING_KEYS) {
   const out = Object.fromEntries(SIBLINGS.map((s) => [s, ""]));
   if (value === undefined) return out;
   if (!isMap(value)) fail(`${where} must be a mapping`);
@@ -99,7 +120,7 @@ function siblings(where, value, locked, secrets) {
     const at = `${where}.${name}`;
     if (!SIBLINGS.includes(name)) fail(`${where}: unknown sibling '${name}' (known: ${SIBLINGS.join(", ")})`);
     if (!locked.has(`${OWNER}/${name}`)) fail(`${at}: ${OWNER}/${name} has no line in .github/catenahq.lock`);
-    const s = spec === null ? {} : keysOf(at, spec, SIBLING_KEYS);
+    const s = spec === null ? {} : keysOf(at, spec, allowed);
     const depth = s["fetch-depth"] ?? 1;
     if (!Number.isInteger(depth) || depth < 0) fail(`${at}.fetch-depth must be a whole number`);
     if (s.token !== undefined) {
@@ -114,11 +135,13 @@ function siblings(where, value, locked, secrets) {
   return out;
 }
 
+// The git pathspecs a check reads; default the whole tree.
 function inputs(where, value) {
-  if (value === undefined) return;
+  if (value === undefined) return ["."];
   if (!Array.isArray(value) || value.length === 0 || value.some((p) => typeof p !== "string" || p === "")) {
     fail(`${where} must be a list of git pathspecs`);
   }
+  return value;
 }
 
 function gatesEntry(value, locked, runner) {
@@ -136,13 +159,14 @@ function gatesEntry(value, locked, runner) {
     "runs-on": runner,
     timeout: TIMEOUT_DEFAULT,
     "go-cache": false,
+    inputs: ["."],
     tools: { ...tools("gates", undefined), node: GATES_NODE },
     sib: { ...siblings("gates", undefined, locked, []), contracts: "1" },
     gates: { "core-app-names": args ?? [], duplication: g.duplication ?? false },
   };
 }
 
-function checkEntry(name, value, locked, secrets, runner) {
+function checkEntry(name, value, locked, secrets, runner, repo) {
   const where = `checks.${name}`;
   if (!CHECK_NAME.test(name)) fail(`${where}: a check name is lowercase letters, digits, - and _`);
   if (name === "gates") fail(`${where}: the name gates belongs to the contracts gates (the top-level gates key)`);
@@ -153,40 +177,74 @@ function checkEntry(name, value, locked, secrets, runner) {
   if (!Number.isInteger(timeout) || timeout < 1 || timeout > 360) fail(`${where}.timeout-minutes must be 1 to 360`);
   const goCache = c["go-cache"] ?? false;
   if (typeof goCache !== "boolean") fail(`${where}.go-cache must be true or false`);
-  inputs(`${where}.inputs`, c.inputs);
+  const paths = inputs(`${where}.inputs`, c.inputs);
+  const sib = siblings(`${where}.siblings`, c.siblings, locked, secrets);
+  const sibs = Object.keys(sib).filter((s) => sib[s] !== "");
+  const toolset = tools(`${where}.tools`, c.tools, { repo, sibs });
+  if (goCache && toolset.go === "") fail(`${where}.go-cache needs tools.go: the caches are Go's`);
   return {
     name,
     "runs-on": runsOn,
     timeout,
     "go-cache": goCache,
-    tools: tools(`${where}.tools`, c.tools),
-    sib: siblings(`${where}.siblings`, c.siblings, locked, secrets),
+    inputs: paths,
+    tools: toolset,
+    sib,
     gates: { "core-app-names": [], duplication: false },
   };
 }
 
-// The matrix of checks.yml (text), given the lock (text), the secret names
-// pr.yml declares and the default runner label. Throws an Error naming the
+// The settings of the scan jobs; enabled is false when checks.yml has no scan
+// key. own-images is space-separated, as the scan action reads it. A scan
+// sibling takes no token: the scan jobs hold none.
+function scanEntry(value, locked) {
+  const s = value === undefined || value === null ? {} : keysOf("scan", value, SCAN_KEYS);
+  const profile = s.profile ?? "full";
+  if (!SCAN_PROFILES.includes(profile)) fail(`scan.profile must be one of ${SCAN_PROFILES.join(", ")}`);
+  const own = s["own-images"] ?? [];
+  if (!Array.isArray(own) || own.some((r) => typeof r !== "string" || !/^\S+$/.test(r))) {
+    fail("scan.own-images must be a list of image refs");
+  }
+  if (own.length > 0 && s["image-inputs"] === undefined) {
+    fail("scan.own-images needs image-inputs, the git pathspecs the images are built from");
+  }
+  inputs("scan.image-inputs", s["image-inputs"]);
+  return {
+    enabled: value !== undefined,
+    profile,
+    "own-images": own.join(" "),
+    "image-inputs": s["image-inputs"] ?? [],
+    sib: siblings("scan.siblings", s.siblings, locked, [], ["fetch-depth"]),
+    tools: { go: tools("scan.tools", s.tools, { allowed: ["go"] }).go },
+  };
+}
+
+// The plan of checks.yml (text), given the lock (text), the secret names
+// pr.yml declares, the default runner label and the caller's repository name:
+// the matrix include list and the scan settings. Throws an Error naming the
 // key on anything it refuses.
-export function buildMatrix({ checks, lock, secrets, runner }) {
+export function buildMatrix({ checks, lock, secrets, runner, repo }) {
   if (typeof runner !== "string" || runner === "") fail("--runner needs a runner label");
-  const doc = keysOf(".github/checks.yml", parse(checks) ?? {}, ["gates", "checks"]);
+  if (typeof repo !== "string" || !REPO_NAME.test(repo)) fail("--repo needs the caller's repository name");
+  const doc = keysOf(".github/checks.yml", parse(checks) ?? {}, ["gates", "checks", "scan"]);
   const locked = lockedRepos(lock);
   const include = [];
   if (doc.gates !== undefined) include.push(gatesEntry(doc.gates, locked, runner));
   if (doc.checks !== undefined) {
     if (!isMap(doc.checks)) fail("checks must be a mapping of check names");
     for (const [name, value] of Object.entries(doc.checks)) {
-      include.push(checkEntry(name, value, locked, secrets, runner));
+      include.push(checkEntry(name, value, locked, secrets, runner, repo));
     }
   }
   if (include.length === 0) fail(".github/checks.yml names no gates and no check");
-  return { include };
+  return { include, scan: scanEntry(doc.scan, locked) };
 }
 
 function main(argv) {
-  const i = argv.indexOf("--runner");
-  const runner = i === -1 ? "" : argv[i + 1];
+  const arg = (name) => {
+    const i = argv.indexOf(name);
+    return i === -1 ? "" : argv[i + 1];
+  };
   const read = (path) => {
     try {
       return readFileSync(path, "utf-8");
@@ -200,7 +258,8 @@ function main(argv) {
     checks: read(".github/checks.yml"),
     lock: read(".github/catenahq.lock"),
     secrets: declaredSecrets(workflow),
-    runner,
+    runner: arg("--runner"),
+    repo: arg("--repo"),
   });
   console.log(JSON.stringify(matrix));
 }
