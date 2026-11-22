@@ -71,24 +71,10 @@ runs:
         path: ws/ops
         lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
         fetch-depth: ${{ fromJSON(inputs.scan).sib.ops }}
-    - name: Read the scanctl commit
-      id: lock
-      shell: bash
-      run: |
-        set -euo pipefail
-        sha=""
-        while read -r repo commit _ || [ -n "$repo" ]; do
-          if [ "$repo" = catenahq/scanctl ]; then sha="$commit"; fi
-        done < .catena-ci/.github/catenahq.lock
-        if [ -z "$sha" ]; then
-          echo "::error::.catena-ci/.github/catenahq.lock has no catenahq/scanctl line"
-          exit 1
-        fi
-        echo "sha=$sha" >> "$GITHUB_OUTPUT"
     - name: Build scanctl
+      # At the commit of the catenahq/scanctl line of .catena-ci/.github/catenahq.lock.
       uses: ./.catena-ci/.github/actions/scanctl
       with:
-        sha: ${{ steps.lock.outputs.sha }}
         self: ${{ github.repository == 'catenahq/scanctl' }}
     - name: Install uv
       # uv backs the Python scanners (semgrep, guarddog), fetched at scan time.

@@ -1,12 +1,17 @@
 name: scanctl
 description: >-
   Build scanctl into $RUNNER_TEMP/bin/scanctl: catenahq/scanctl at the commit
-  sha, checked out under .scanctl-src, or with self the scanctl checkout under
-  ws/scanctl. Go comes from the go.mod of the tree it builds.
+  sha, else at the commit the catenahq/scanctl line of
+  .catena-ci/.github/catenahq.lock pins, checked out under .scanctl-src; or
+  with self the scanctl checkout under ws/scanctl. Go comes from the go.mod of
+  the tree it builds.
 
 inputs:
   sha:
-    description: The catenahq/scanctl commit to build (40 hex digits). Unused with self.
+    description: >-
+      The catenahq/scanctl commit to build (40 hex digits). Empty: the commit
+      of the contracts checkout's lock, .catena-ci/.github/catenahq.lock.
+      Unused with self.
     default: ''
   self:
     description: "'true' builds the checkout under ws/scanctl: a run in catenahq/scanctl scans with its own code."
@@ -15,22 +20,31 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Check the commit
+    - name: The commit
+      id: commit
       if: inputs.self != 'true'
       shell: bash
       env:
         SHA: ${{ inputs.sha }}
       run: |
-        if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
-          echo "::error::scanctl: sha '$SHA' is not a 40-hex commit"
+        set -euo pipefail
+        sha="$SHA"
+        if [ -z "$sha" ]; then
+          while read -r repo commit _ || [ -n "$repo" ]; do
+            if [ "$repo" = catenahq/scanctl ]; then sha="$commit"; fi
+          done < .catena-ci/.github/catenahq.lock
+        fi
+        if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::scanctl: sha '$sha' is not a 40-hex commit (empty: .catena-ci/.github/catenahq.lock has no catenahq/scanctl line)"
           exit 1
         fi
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
     - name: Check out scanctl
       if: inputs.self != 'true'
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       with:
         repository: catenahq/scanctl
-        ref: ${{ inputs.sha }}
+        ref: ${{ steps.commit.outputs.sha }}
         path: .scanctl-src
         persist-credentials: false
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7

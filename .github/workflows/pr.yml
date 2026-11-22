@@ -4,10 +4,11 @@ name: pr
 # ci.yml holds the triggers and calls this file with its runner label; its
 # .github/checks.yml names the checks (README.md, "Shared PR workflow").
 #
-# plan reads checks.yml as data into a matrix and the scan settings, and drops
-# each entry, and the scan, that an earlier run passed with the same key; check
-# runs each entry with bash ci/run <name>, or the contracts gates for the entry
-# named gates; scan runs scanctl on a push or pull request and scan-daily on a
+# plan reads checks.yml as data into a matrix and the scan settings, adds an
+# entry per app the change touches when checks.yml has apps, and drops each
+# entry, and the scan, that an earlier run passed with the same key; check runs
+# each entry by its kind: bash ci/run <name>, the contracts gates, or
+# scripts/ci/app-check.sh; scan runs scanctl on a push or pull request and scan-daily on a
 # scheduled run; gate is the one status a branch rule requires. The CI code comes from this
 # repository at the commit the caller pins (job.workflow_sha), checked out
 # under .catena-ci: a "./" action resolves against the caller's workspace. The
@@ -44,6 +45,8 @@ jobs:
       # runs: checks.yml has a scan key and the scan is not reused.
       scan: ${{ steps.matrix.outputs.scan }}
       scan-run: ${{ steps.matrix.outputs.scan-enabled == 'true' && steps.reuse.outputs.scan-reused != 'true' }}
+      # The app settings (JSON) the app checks read.
+      apps: ${{ steps.matrix.outputs.apps }}
       # The commit of each bundled sibling, {"<repo>":"<sha>"}.
       bundle-shas: ${{ steps.bundle.outputs.bundle-shas }}
     steps:
@@ -74,7 +77,9 @@ jobs:
           PRIVATE: ${{ github.event.repository.private }}
           HAS_TOKEN: ${{ secrets.CATENA_EE_READ_TOKEN != '' }}
         # A bundle travels as an artifact, which anyone who can read a public
-        # repository can download, so only a private caller bundles.
+        # repository can download, so only a private caller bundles. With
+        # apps.catalog true this job runs the caller's own app tools, so it
+        # holds no secret then.
         run: |
           plan="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --repo "$REPO" --runner "$RUNNER_LABEL")"
           echo "$plan" | jq .
@@ -87,9 +92,38 @@ jobs:
             echo "::error::a check reads a sibling with CATENA_EE_READ_TOKEN: pass it under secrets in the job that calls pr.yml"
             exit 1
           fi
+          if [ "$(jq -r '.apps.enabled and .apps.catalog' <<< "$plan")" = true ] && [ "$HAS_TOKEN" = true ]; then
+            echo "::error::plan runs this repository's app tools (apps.catalog true): drop CATENA_EE_READ_TOKEN from the secrets of the job that calls pr.yml"
+            exit 1
+          fi
           echo "plan=$plan" >> "$GITHUB_OUTPUT"
           echo "scan=$(jq -c .scan <<< "$plan")" >> "$GITHUB_OUTPUT"
           echo "scan-enabled=$(jq -r .scan.enabled <<< "$plan")" >> "$GITHUB_OUTPUT"
+          echo "apps=$(jq -c .apps <<< "$plan")" >> "$GITHUB_OUTPUT"
+      # With apps in checks.yml: the tools (this tree's, or catena-templates' at
+      # the caller's lock) refuse a change that touches more than one app and
+      # list the apps it touches, each of which gets an entry (README.md, "App
+      # checks").
+      - if: fromJSON(steps.matrix.outputs.apps).enabled
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ fromJSON(steps.matrix.outputs.apps).app.tools.uv }}
+          enable-cache: false
+      - name: Check out the app tools
+        if: fromJSON(steps.matrix.outputs.apps).enabled && !fromJSON(steps.matrix.outputs.apps).catalog
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-templates
+          path: ws/catena-templates
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+      - name: Changed apps
+        id: apps
+        if: fromJSON(steps.matrix.outputs.apps).enabled
+        working-directory: ws/${{ github.event.repository.name }}
+        env:
+          PLAN: ${{ steps.matrix.outputs.plan }}
+          CATALOG: ${{ fromJSON(steps.matrix.outputs.apps).catalog }}
+        run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-plan.sh"
       # Drops each entry, and the scan, whose key an earlier run recorded as
       # passed; a scheduled run looks nothing up. A failed lookup fails the
       # step (README.md, "Per-check reuse").
@@ -97,7 +131,7 @@ jobs:
         id: reuse
         working-directory: ws/${{ github.event.repository.name }}
         env:
-          PLAN: ${{ steps.matrix.outputs.plan }}
+          PLAN: ${{ steps.apps.outputs.plan || steps.matrix.outputs.plan }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
           SIBLING_TOKEN: ${{ secrets.CATENA_EE_READ_TOKEN || github.token }}
@@ -374,7 +408,7 @@ jobs:
       # Pinned in contracts/.vale-version, which check-prose.mjs also reads and
       # enforces: the grammars decide which comments are visible.
       - name: Install vale
-        if: matrix.name == 'gates'
+        if: matrix.kind == 'gates'
         working-directory: ${{ github.workspace }}
         run: |
           version="$(cat ws/contracts/.vale-version)"
@@ -384,7 +418,7 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Contracts gates
         # Every gate runs and prints its findings; any failure fails the step.
-        if: matrix.name == 'gates'
+        if: matrix.kind == 'gates'
         env:
           APP_NAMES: ${{ toJSON(matrix.gates.core-app-names) }}
           DUPLICATION: ${{ matrix.gates.duplication }}
@@ -402,10 +436,30 @@ jobs:
           fi
           exit "$status"
       - name: bash ci/run ${{ matrix.name }}
-        if: matrix.name != 'gates'
+        if: matrix.kind == 'check'
         env:
           CHECK: ${{ matrix.name }}
         run: bash ci/run "$CHECK"
+      # The app checks (README.md, "App checks").
+      - name: Swarm lint and the app checker over the blueprints
+        if: matrix.kind == 'apps-repo'
+        env:
+          CATALOG: ${{ fromJSON(needs.plan.outputs.apps).catalog }}
+        run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-check.sh" repo
+      - name: Build scanctl
+        if: matrix.kind == 'app'
+        uses: ./.catena-ci/.github/actions/scanctl
+      - name: App checks
+        if: matrix.kind == 'app'
+        env:
+          CHECK: ${{ matrix.name }}
+          CATALOG: ${{ fromJSON(needs.plan.outputs.apps).catalog }}
+          OWN_IMAGES: ${{ fromJSON(needs.plan.outputs.apps).own-images }}
+          OWNER: ${{ github.repository_owner }}
+          GITHUB_TOKEN: ${{ github.token }}
+          # The year of age is asked of a pull request from a fork only.
+          PROVENANCE_CHECK_AGE: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-check.sh" app "${CHECK#app-}"
       # Reached only when the check passed. A failed upload loses only the
       # record: a later run of the same key runs the check again.
       - name: Upload the reuse record

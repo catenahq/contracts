@@ -67,12 +67,13 @@ export function sortKeys(value) {
 }
 
 // What a key is computed over: a check entry of the matrix, or the scan,
-// which reads the whole tree and also the day's vulnerability feed.
+// which reads the whole tree. The scan and an entry of kind app (its images'
+// scan and pulls) also read the day's vulnerability feed and registries.
 export function specOf({ entry, scan }) {
   if (scan !== undefined) return { name: "scan", entry: scan, inputs: ["."], dated: true, jobs: [`${CALLER_JOB} / scan`] };
   if (typeof entry?.name !== "string" || !/^[a-z0-9][a-z0-9_-]*$/.test(entry.name)) throw new UsageError("an entry needs a check name");
   if (!Array.isArray(entry.inputs) || entry.inputs.length === 0) throw new UsageError(`entry ${entry.name} has no inputs`);
-  return { name: entry.name, entry, inputs: entry.inputs, dated: false, jobs: [`${CALLER_JOB} / check (${entry.name})`] };
+  return { name: entry.name, entry, inputs: entry.inputs, dated: entry.kind === "app", jobs: [`${CALLER_JOB} / check (${entry.name})`] };
 }
 
 // The siblings an entry checks out, sorted.

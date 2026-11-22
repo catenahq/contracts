@@ -264,8 +264,9 @@ check that names no `runs-on`. These jobs run:
 - `plan` checks the caller out under `ws/<repo>` (two commits deep) and
   contracts at `job.workflow_sha` (the commit the caller pins) under
   `.catena-ci/`, turns the caller's `.github/checks.yml` into a matrix with
-  `scripts/ci/checks-matrix.mjs`, and drops each entry, and the scan, that an
-  earlier run passed with the same key (see "Per-check reuse"). Its output
+  `scripts/ci/checks-matrix.mjs`, adds an entry per app the change touches
+  when checks.yml has `apps` (see "App checks"), and drops each entry, and the
+  scan, that an earlier run passed with the same key (see "Per-check reuse"). Its output
   `matrix` holds the entries left, `run` is `false` when none is left, `scan`
   is the scan settings (JSON) and `scan-run` is `true` when checks.yml has a
   `scan` key and the scan is not reused. It also bundles each private sibling
@@ -273,10 +274,11 @@ check that names no `runs-on`. These jobs run:
 - `check (<name>)`, one per matrix entry, when `run` is `true`: the caller (two
   commits deep) and `.catena-ci/` again, each sibling the entry names through
   checkout-sibling at the caller's lock, or from its bundle, the entry's tools
-  (Node 26 when it names no Node), the reuse record, then `bash ci/run <name>` in
-  `ws/<repo>`. The entry `gates` runs the contracts gates of the locked
-  contracts checkout instead: unicode, repo rules and whole-tree prose always,
-  the core-app-name gate with its arguments, jscpd 4.3.0 with `duplication`.
+  (Node 26 when it names no Node), the reuse record, then what the entry's
+  `kind` runs in `ws/<repo>`: `bash ci/run <name>` for a `check`; the contracts
+  gates of the locked contracts checkout for `gates`: unicode, repo rules and
+  whole-tree prose always, the core-app-name gate with its arguments, jscpd
+  4.3.0 with `duplication`; `scripts/ci/app-check.sh` for `apps-repo` and `app`.
   An entry with `go-cache: true` restores the Go build and module caches
   after setting up Go: key `go-<hash of go.sum>-<run id>-<run attempt>`,
   restored by the prefixes `go-<hash>-` and `go-`, where the `go.sum` is the
@@ -317,6 +319,9 @@ scan:                        # absent: no scan
   image-inputs: [Dockerfile, go.mod, go.sum, scanctl.yml, .scanctl/]   # git pathspecs
   siblings: {catena-ce: {fetch-depth: 0}}   # what ci/run image reads
   tools: {go: go.mod}        # go only
+apps:                        # absent: no app checks
+  catalog: true              # tools from this tree; false: from catena-templates at the lock
+  own-images: [ghcr.io/catenahq/repertoire]   # image repositories this repository builds
 ```
 
 A sibling is one of `catena-admin`, `catena-ce`, `catena-templates`,
@@ -325,25 +330,32 @@ needs the contracts line. A check sibling's `token` must name a secret `pr.yml`
 declares in `on.workflow_call.secrets`: `CATENA_EE_READ_TOKEN`. A scan sibling
 takes no `token`. A check's `go: <sibling>/go.mod` needs that sibling in the
 check's `siblings`. A check with `go-cache: true` needs `tools.go`. No check may
-be named `gates`.
+be named `gates`, and with `apps` none `apps-repo` or `app-<anything>`.
+`apps.catalog` is required; `false` needs the catena-templates line, and
+`own-images` names repositories without a tag.
 
-The parser prints one line of JSON: `include`, the matrix, and `scan`. Each
-entry carries `inputs` (`["."]` when the check names none, and for `gates`)
+The parser prints one line of JSON: `include`, the matrix, `scan` and `apps`.
+Each entry carries its `kind` (`gates`, `check`, `apps-repo`, `app`), `inputs`
+(`["."]` when the check names none, and for `gates`)
 and every tool, sibling and gate key; a sibling's value is its fetch
 depth, `bundle` for one with a `token`, or empty when the check does not use
 it. `go-file` is the go.mod setup-go reads, `ws/<repo>/go.mod` for `go.mod`
 and `ws/<sibling>/go.mod` for `<sibling>/go.mod`, empty for an exact version.
 `scan` carries every key too, with `enabled` false when checks.yml has none,
-and `own-images` joined by spaces:
+and `own-images` joined by spaces. `apps` holds `enabled`, `catalog`,
+`own-images` joined by spaces, `repo`, the `apps-repo` entry (in `include`
+when `enabled`), and `app`, the entry of a changed app without its name and
+its `blueprints/<id>/` input:
 
 ```json
-{"include":[{"name":"go","runs-on":"catena-ci","timeout":40,"go-cache":true,"inputs":["."],
+{"include":[{"name":"go","kind":"check","runs-on":"catena-ci","timeout":40,"go-cache":true,"inputs":["."],
   "tools":{"node":"","uv":"","go":"go.mod","go-file":"ws/catena-admin/go.mod","staticcheck":"","staticcheck-sha256":""},
   "sib":{"catena-admin":"","catena-ce":"0","catena-templates":"","contracts":"1","docs":"","ops":""},
   "gates":{"core-app-names":[],"duplication":false}}],
  "scan":{"enabled":true,"profile":"full","own-images":"catena-admin:ci","image-inputs":["Dockerfile"],
   "sib":{"catena-admin":"","catena-ce":"0","catena-templates":"","contracts":"","docs":"","ops":""},
-  "tools":{"go":"go.mod"}}}
+  "tools":{"go":"go.mod"}},
+ "apps":{"enabled":false,"catalog":false,"own-images":"","repo":{"name":"apps-repo","kind":"apps-repo",...},"app":{"kind":"app",...}}}
 ```
 
 Run the parser from a caller's checkout to see its plan; `--repo` is the
@@ -354,7 +366,8 @@ caller's repository name:
 It needs `npm ci --prefix scripts/ci` once (npm `yaml`, locked in
 `scripts/ci/`, outside the package consumers link).
 `scripts/ci/checks-matrix.test.mjs` runs it over the checks of ci-runner,
-catena-admin and ops, their scan settings, and each key it refuses.
+catena-admin and ops, their scan settings, the app checks, and each key it
+refuses.
 
 ### Per-check reuse
 
@@ -370,8 +383,8 @@ these lines:
   git pathspecs, globs included;
 - `sib:<repo>=<commit>` for each sibling the entry names, sorted;
 - `workflow=<job.workflow_sha>`;
-- `date=<UTC yyyy-mm-dd>` for the scan, whose findings follow the
-  vulnerability feed.
+- `date=<UTC yyyy-mm-dd>` for the scan and an entry of kind `app`, whose
+  findings follow the vulnerability feed.
 
 The record of a key is an artifact named `ci-check.<name>.<first 40 hex of the
 key's sha256>` holding the key, kept 30 days.
@@ -422,7 +435,8 @@ jobs:
 ```
 
 `plan` is the one job that receives the secret, and it runs none of the
-caller's code. For each such sibling an entry left after reuse names, it checks
+caller's code: with `apps.catalog: true`, where it runs the caller's app tools,
+the secret fails it. For each such sibling an entry left after reuse names, it checks
 the sibling out through checkout-sibling with the token at the caller's lock
 (`fetch-depth: 0`), writes `git bundle create <repo>.bundle HEAD`, and uploads
 the bundles as the artifact `sibling-bundles`, kept 1 day. Its output
@@ -502,8 +516,57 @@ and `DOCKERHUB_TOKEN` there, image pulls log in to Docker Hub. A failed
 No scan job receives `CATENA_EE_READ_TOKEN`.
 
 `.github/actions/scanctl` builds scanctl into `$RUNNER_TEMP/bin/scanctl` with
-`go build`: `sha` checks catenahq/scanctl out under `.scanctl-src`, `self:
-'true'` builds `ws/scanctl`. Go comes from the go.mod of the tree it builds.
+`go build`: `sha`, else the commit of the `catenahq/scanctl` line of
+`.catena-ci/.github/catenahq.lock`, checks catenahq/scanctl out under
+`.scanctl-src`; `self: 'true'` builds `ws/scanctl`. Go comes from the go.mod
+of the tree it builds.
+
+### App checks
+
+A repository of apps under `blueprints/<id>/` (catena-templates, which holds
+the catalog and its tools, and ops-templates) gets its app checks from the
+`apps` key of its checks.yml. `apps.catalog: true` runs the tools of the tree
+itself; `false` runs those of catena-templates, checked out under
+`ws/catena-templates` at the caller's lock, on the caller's tree
+(`TEMPLATES_ROOT`).
+
+In `plan`, after the parser, `scripts/ci/app-plan.sh` reads the change, `HEAD`
+against its first parent, and fails `plan` when it touches more than one app
+(`build/versions.py scope`), so one change is one app's tag. Each app it
+touches (`build/app_check.py changed`) that still has its
+`docker-compose.yml`, and whose id matches `^[a-z0-9][a-z0-9-]*$`, gets the
+entry `app-<id>`: kind `app`, timeout 60 minutes, uv 0.13.9, inputs
+`blueprints/<id>/`, the tools (`build/`, `lib/`, `pyproject.toml`, `uv.lock`,
+the two schemas), `.clamav-allow.sfp` and `.scanctl/`. The entry `apps-repo`
+runs on every change, with inputs `blueprints/` and the tools. Since `plan`
+then runs the caller's tools, a caller with `apps.catalog: true` passes no
+`CATENA_EE_READ_TOKEN` (see "Private siblings").
+
+`check` runs `scripts/ci/app-check.sh` in `ws/<repo>`, with `contents: read`:
+
+- `app-check.sh repo` (`apps-repo`): the swarm lint
+  (`build/lint_swarm.py`), then the app checker of each app. The app checker
+  is catena-applint in the catena-admin image `build/app_check.py checker
+  <id>` names, the release the app requires; it reads all of `blueprints/`
+  (`--catalog --nodes 2` for the catalog, `--nodes 2` otherwise) and an app
+  fails on an error of its own compose file. Each image runs once for the apps
+  that name it.
+- `app-check.sh app <id>` (`app-<id>`): the swarm loader reads the stack file;
+  the app checker; the app's images are pulled; the plain export check
+  (`build/pack.py plain-check`) for an app whose card sets `bench.plain`;
+  provenance (`build/app_check.py provenance`), with `own-images` and, for the
+  catalog, `ghcr.io/<owner>/<folder>` for each folder of `images/`; scanctl,
+  built by `.github/actions/scanctl`, runs trivy over the images the compose
+  pins, judged against the first parent (`-baseline-ref`) and
+  `.scanctl/baseline.sarif`, its summary in the job summary; ClamAV
+  (`clamav/clamav:1.5`, with `.clamav-allow.sfp` of the tools) over each
+  image's exported files, where tar's failure to make a device node is the one
+  extraction error allowed.
+
+An app entry's key holds its inputs and the date (see "Per-check reuse"), so
+a run whose change leaves an app's folder and the tools alone reuses that
+app's pass of the same day. `scripts/ci/app-check.test.mjs` drives both scripts with
+stubs for `uv`, `docker`, `git` and scanctl on `PATH`.
 
 ### Control workflow
 

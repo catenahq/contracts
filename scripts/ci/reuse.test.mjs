@@ -233,6 +233,10 @@ try {
   const at = (spec, date) => recordName(spec.name, keyText({ spec, tree: "t", sibs: [], workflowSha: W, date }));
   assert.notEqual(at(scanSpec, "2026-11-21"), at(scanSpec, "2026-11-22"));
   assert.equal(at(specOf({ entry: PYTHON }), "2026-11-21"), at(specOf({ entry: PYTHON }), "2026-11-22"));
+  // An app entry's key holds the date too: its images are scanned.
+  const appSpec = specOf({ entry: { ...PYTHON, name: "app-web", kind: "app" } });
+  assert.notEqual(at(appSpec, "2026-11-21"), at(appSpec, "2026-11-22"));
+  assert.ok(keyText({ spec: appSpec, tree: "t", sibs: [], workflowSha: W, date: "2026-11-22" }).endsWith("date=2026-11-22\n"));
 
   // The base moved on docs/ only: python keeps its key and records; docs
   // differs from the pull request head and records nothing, except on a

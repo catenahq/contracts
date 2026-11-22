@@ -1,5 +1,5 @@
 // checks-matrix.mjs over the checks.yml of ci-runner, catena-admin and ops,
-// their scan settings, and each key it refuses. Run with `node scripts/ci/checks-matrix.test.mjs`
+// their scan settings, the app checks, and each key it refuses. Run with `node scripts/ci/checks-matrix.test.mjs`
 // after `npm ci --prefix scripts/ci`.
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
@@ -85,6 +85,20 @@ const NO_TOOLS = { node: "", uv: "", go: "", "go-file": "", staticcheck: "", "st
 const NO_SIB = Object.fromEntries(SIBLINGS.map((s) => [s, ""]));
 const NO_GATES = { "core-app-names": [], duplication: false };
 const NO_SCAN = { enabled: false, profile: "full", "own-images": "", "image-inputs": [], sib: NO_SIB, tools: { go: "" } };
+const APP_TOOLS = ["build/", "lib/", "pyproject.toml", "uv.lock", "app.schema.json", "block.schema.json"];
+// The entries of the app checks, with catena-templates checked out at depth
+// templates ("" for the catalog itself, whose tools are its own).
+const appEntries = (templates) => {
+  const common = {
+    "runs-on": "catena-ci", "go-cache": false, tools: { ...NO_TOOLS, uv: "0.13.9" },
+    sib: { ...NO_SIB, "catena-templates": templates }, gates: NO_GATES,
+  };
+  return {
+    repo: { name: "apps-repo", kind: "apps-repo", timeout: 20, inputs: ["blueprints/", ...APP_TOOLS], ...common },
+    app: { kind: "app", timeout: 60, inputs: [...APP_TOOLS, ".clamav-allow.sfp", ".scanctl/"], ...common },
+  };
+};
+const NO_APPS = { enabled: false, catalog: false, "own-images": "", ...appEntries("1") };
 const matrix = (repo, extra = {}) =>
   buildMatrix({ checks: CHECKS[repo], lock: LOCK[repo], secrets: [], runner: "catena-ci", repo, ...extra });
 const refuses = (extra, message, repo = "ci-runner") =>
@@ -104,16 +118,17 @@ assert.deepEqual(
 assert.deepEqual(matrix("ci-runner"), {
   include: [
     {
-      name: "gates", "runs-on": "catena-ci", timeout: 20, "go-cache": false, inputs: ["."],
+      name: "gates", kind: "gates", "runs-on": "catena-ci", timeout: 20, "go-cache": false, inputs: ["."],
       tools: { ...NO_TOOLS, node: "26" }, sib: { ...NO_SIB, contracts: "1" }, gates: NO_GATES,
     },
     {
-      name: "python", "runs-on": "catena-ci", timeout: 20, "go-cache": false,
+      name: "python", kind: "check", "runs-on": "catena-ci", timeout: 20, "go-cache": false,
       inputs: ["src/", "tests/", "pyproject.toml", "uv.lock", ".python-version"],
       tools: { ...NO_TOOLS, uv: "0.13.9" }, sib: NO_SIB, gates: NO_GATES,
     },
   ],
   scan: NO_SCAN,
+  apps: NO_APPS,
 });
 
 // catena-admin: gate arguments, a deep sibling, Go from go.mod, staticcheck by
@@ -127,7 +142,7 @@ assert.deepEqual(matrix("ci-runner"), {
   });
   assert.deepEqual(gates.gates, { "core-app-names": ["--exclude", "central/", "."], duplication: true });
   assert.deepEqual(go, {
-    name: "go", "runs-on": "catena-ci", timeout: 40, "go-cache": true, inputs: ["."],
+    name: "go", kind: "check", "runs-on": "catena-ci", timeout: 40, "go-cache": true, inputs: ["."],
     tools: { ...NO_TOOLS, go: "go.mod", "go-file": "ws/catena-admin/go.mod" },
     sib: { ...NO_SIB, "catena-ce": "0", "catena-templates": "1", contracts: "1" },
     gates: NO_GATES,
@@ -183,8 +198,36 @@ refuses({}, "checks.python.siblings.catena-admin.token: CATENA_EE_READ_TOKEN is 
   assert.equal(sellable.scan.profile, "sellable");
 }
 
+// apps: the catalog's own tools, or catena-templates' at the lock; the
+// apps-repo entry joins the matrix and app is the entry of each changed app.
+{
+  const catalog = matrix("ci-runner", { checks: "gates: {}\napps: {catalog: true}\n" });
+  assert.deepEqual(catalog.include.map((e) => e.name), ["gates", "apps-repo"]);
+  assert.deepEqual(catalog.include[1], appEntries("").repo);
+  assert.deepEqual(catalog.apps, { enabled: true, catalog: true, "own-images": "", ...appEntries("") });
+  const folder = matrix("ops", {
+    checks: "apps:\n  catalog: false\n  own-images: [ghcr.io/catenahq/repertoire, ghcr.io/catenahq/catena-reports]\n",
+  });
+  assert.deepEqual(folder.include, [appEntries("1").repo], "apps alone is a plan");
+  assert.deepEqual(folder.apps, {
+    enabled: true, catalog: false, "own-images": "ghcr.io/catenahq/repertoire ghcr.io/catenahq/catena-reports", ...appEntries("1"),
+  });
+  // A check of another name than the app entries' stays a check.
+  const named = matrix("ci-runner", { checks: "checks:\n  app-ci: {}\n  apps: {}\n" });
+  assert.deepEqual(named.include.map((e) => [e.name, e.kind]), [["app-ci", "check"], ["apps", "check"]]);
+}
+
 // Each refusal names its key.
 const ci = (body) => ({ checks: body });
+refuses(ci("apps:\n"), "apps must be a mapping");
+refuses(ci("apps: {}\n"), "apps.catalog must be true (the tools of this tree) or false");
+refuses(ci("apps: {catalog: 'yes'}\n"), "apps.catalog must be true");
+refuses(ci("apps: {catalog: true, tools: {uv: 0.13.9}}\n"), "apps: unknown key 'tools'");
+refuses(ci("apps: {catalog: false}\n"), "apps.catalog false reads the tools from catena-templates: catenahq/catena-templates has no line");
+refuses(ci("apps: {catalog: true, own-images: [ghcr.io/catenahq/repertoire:1.0]}\n"), "apps.own-images must be a list of image names without a tag");
+refuses(ci("apps: {catalog: true, own-images: ghcr.io/catenahq/repertoire}\n"), "apps.own-images must be a list");
+refuses(ci("apps: {catalog: true}\nchecks:\n  app-web: {}\n"), "checks.app-web: the names apps-repo and app-<id> belong to the app checks");
+refuses(ci("apps: {catalog: true}\nchecks:\n  apps-repo: {}\n"), "checks.apps-repo: the names apps-repo and app-<id> belong to the app checks");
 refuses(ci("gates: {}\nlint: {}\n"), ".github/checks.yml: unknown key 'lint'");
 refuses(ci("gates: {}\nscan: {no-gate: true}\n"), "scan: unknown key 'no-gate'");
 refuses(ci("gates: {}\nscan: [full]\n"), "scan must be a mapping");
@@ -225,7 +268,7 @@ refuses(ci("gates:\n  core-app-names: .\n"), "gates.core-app-names must be a lis
 refuses(ci("gates:\n  duplication: 1\n"), "gates.duplication must be true or false");
 refuses({ checks: "gates: {}\n", lock: "" }, "gates: catenahq/contracts has no line in .github/catenahq.lock");
 refuses({ lock: "catenahq/contracts main\n" }, ".github/catenahq.lock: malformed line 'catenahq/contracts main'");
-refuses(ci(""), ".github/checks.yml names no gates and no check");
+refuses(ci(""), ".github/checks.yml names no gates, no check and no apps");
 refuses({ runner: "" }, "--runner needs a runner label");
 refuses({ repo: "" }, "--repo needs the caller's repository name");
 refuses({ repo: "catenahq/ops" }, "--repo needs the caller's repository name");
