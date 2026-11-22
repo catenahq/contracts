@@ -268,10 +268,11 @@ check that names no `runs-on`. These jobs run:
   every sibling the matrix and the scan name and the caller's lock. A reused
   success sets `run` to `false`. Its output `scan` is the scan settings (JSON)
   and `scan-run` is `true` when checks.yml has a `scan` key and `run` is
-  `true`.
+  `true`. When `run` is `true` it also bundles each private sibling (see
+  "Private siblings").
 - `check (<name>)`, one per matrix entry, when `run` is `true`: the caller and
   `.catena-ci/` again, each sibling the entry names through checkout-sibling at
-  the caller's lock, the entry's tools, then `bash ci/run <name>` in
+  the caller's lock, or from its bundle, the entry's tools, then `bash ci/run <name>` in
   `ws/<repo>`. The entry `gates` runs the contracts gates of the locked
   contracts checkout instead: unicode, repo rules and whole-tree prose always,
   the core-app-name gate with its arguments, jscpd 4.3.0 with `duplication`.
@@ -294,8 +295,8 @@ checks:
   go:                        # bash ci/run go
     runs-on: catena-ci       # default: the runner input
     timeout-minutes: 40      # default 20
-    tools: {go: go.mod}      # node, uv: exact; go: go.mod or exact; staticcheck: {version, sha256}
-    siblings: {catena-ce: {fetch-depth: 0}, contracts: {}}
+    tools: {go: go.mod}      # node, uv: exact; go: go.mod, <sibling>/go.mod or exact; staticcheck: {version, sha256}
+    siblings: {catena-ce: {fetch-depth: 0}, contracts: {}}   # or {token: CATENA_EE_READ_TOKEN}
     inputs: [.]              # git pathspecs the check reads
     go-cache: true
 scan:                        # absent: no scan
@@ -308,19 +309,22 @@ scan:                        # absent: no scan
 
 A sibling is one of `catena-admin`, `catena-ce`, `catena-templates`,
 `contracts`, `docs` and `ops`, and needs a line in the caller's lock; `gates`
-needs the contracts line. A sibling's `token` must name a secret `pr.yml`
-declares in `on.workflow_call.secrets`, and it declares none. No check may be
-named `gates`.
+needs the contracts line. A check sibling's `token` must name a secret `pr.yml`
+declares in `on.workflow_call.secrets`: `CATENA_EE_READ_TOKEN`. A scan sibling
+takes no `token`. A check's `go: <sibling>/go.mod` needs that sibling in the
+check's `siblings`. No check may be named `gates`.
 
 The parser prints one line of JSON: `include`, the matrix, and `scan`. Each
 entry carries every tool, sibling and gate key; a sibling's value is its fetch
-depth, or empty when the check does not use it. `scan` carries every key too,
-with `enabled` false when checks.yml has none, and `own-images` joined by
-spaces:
+depth, `bundle` for one with a `token`, or empty when the check does not use
+it. `go-file` is the go.mod setup-go reads, `ws/<repo>/go.mod` for `go.mod`
+and `ws/<sibling>/go.mod` for `<sibling>/go.mod`, empty for an exact version.
+`scan` carries every key too, with `enabled` false when checks.yml has none,
+and `own-images` joined by spaces:
 
 ```json
 {"include":[{"name":"go","runs-on":"catena-ci","timeout":40,"go-cache":true,
-  "tools":{"node":"","uv":"","go":"go.mod","staticcheck":"","staticcheck-sha256":""},
+  "tools":{"node":"","uv":"","go":"go.mod","go-file":"ws/catena-admin/go.mod","staticcheck":"","staticcheck-sha256":""},
   "sib":{"catena-admin":"","catena-ce":"0","catena-templates":"","contracts":"1","docs":"","ops":""},
   "gates":{"core-app-names":[],"duplication":false}}],
  "scan":{"enabled":true,"profile":"full","own-images":"catena-admin:ci","image-inputs":["Dockerfile"],
@@ -328,14 +332,43 @@ spaces:
   "tools":{"go":"go.mod"}}}
 ```
 
-Run the parser from a caller's checkout to see its plan:
+Run the parser from a caller's checkout to see its plan; `--repo` is the
+caller's repository name:
 
-    node ../contracts/scripts/ci/checks-matrix.mjs --runner catena-ci
+    node ../contracts/scripts/ci/checks-matrix.mjs --repo catena-admin --runner catena-ci
 
 It needs `npm ci --prefix scripts/ci` once (npm `yaml`, locked in
 `scripts/ci/`, outside the package consumers link).
 `scripts/ci/checks-matrix.test.mjs` runs it over the checks of ci-runner,
 catena-admin and ops, their scan settings, and each key it refuses.
+
+### Private siblings
+
+A check reads a private sibling without holding a token. Its checks.yml names
+the sibling with `token: CATENA_EE_READ_TOKEN`, and the caller passes the
+secret:
+
+```yaml
+jobs:
+  ci:
+    uses: catenahq/contracts/.github/workflows/pr.yml@<40-hex sha> # <branch>
+    secrets:
+      CATENA_EE_READ_TOKEN: ${{ secrets.CATENA_EE_READ_TOKEN }}
+```
+
+`plan` is the one job that receives the secret, and it runs none of the
+caller's code. When the checks run, it checks each such sibling out through
+checkout-sibling with the token at the caller's lock (`fetch-depth: 0`),
+writes `git bundle create <repo>.bundle HEAD`, and uploads the bundles as the
+artifact `sibling-bundles`, kept 1 day. Its output `bundle-shas` maps each
+bundled sibling to its commit (`{"catena-admin":"<sha>"}`). Same-tree reads the
+siblings' branches with the same token (`sibling-token`). A check that names a
+bundle sibling downloads the artifact, runs `git clone --no-checkout` of the
+sibling's bundle into `ws/<repo>`, and checks the recorded commit out detached.
+
+`plan` fails when a check names a bundle sibling and the caller passes no
+secret, or the caller is a public repository: anyone who can read a public
+repository can download its artifacts.
 
 ### Gate status
 
@@ -399,7 +432,7 @@ output. The action:
 caller's environment `ci` (`deployment: false`): with `DOCKERHUB_USERNAME`
 and `DOCKERHUB_TOKEN` there, image pulls log in to Docker Hub. A failed
 `scan-daily` opens an issue labelled `scan`, or comments on the open one.
-`pr.yml` declares no secret.
+No scan job receives `CATENA_EE_READ_TOKEN`.
 
 `.github/actions/scanctl` builds scanctl into `$RUNNER_TEMP/bin/scanctl` with
 `go build`: `sha` checks catenahq/scanctl out under `.scanctl-src`, `self:

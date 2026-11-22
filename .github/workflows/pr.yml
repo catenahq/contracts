@@ -12,7 +12,9 @@ name: pr
 # repository at the commit the caller pins (job.workflow_sha), checked out
 # under .catena-ci: a "./" action resolves against the caller's workspace. The
 # gate scripts and every other sibling come from the caller's
-# .github/catenahq.lock; scanctl comes from this repository's lock.
+# .github/catenahq.lock; scanctl comes from this repository's lock. A sibling
+# a check reads with a token is fetched by plan, the one job that holds the
+# token and runs none of the caller's code, and reaches check as a git bundle.
 
 on:
   workflow_call:
@@ -21,6 +23,10 @@ on:
         description: Runner label of plan, gate and every check that names no runs-on.
         type: string
         required: true
+    secrets:
+      CATENA_EE_READ_TOKEN:
+        description: Reads the private siblings a check names with token CATENA_EE_READ_TOKEN.
+        required: false
 
 permissions: {}
 
@@ -37,6 +43,8 @@ jobs:
       # runs: checks.yml has a scan key and the tree is not reused.
       scan: ${{ steps.matrix.outputs.scan }}
       scan-run: ${{ steps.matrix.outputs.scan-enabled == 'true' && steps.tree.outputs.run == 'true' }}
+      # The commit of each bundled sibling, {"<repo>":"<sha>"}.
+      bundle-shas: ${{ steps.bundle.outputs.bundle-shas }}
     steps:
       - name: Check out the caller
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -60,15 +68,30 @@ jobs:
         working-directory: ws/${{ github.event.repository.name }}
         env:
           RUNNER_LABEL: ${{ inputs.runner }}
+          REPO: ${{ github.event.repository.name }}
+          PRIVATE: ${{ github.event.repository.private }}
+          HAS_TOKEN: ${{ secrets.CATENA_EE_READ_TOKEN != '' }}
         # The siblings of every entry and of the scan join the same-tree key.
+        # A bundle travels as an artifact, which anyone who can read a public
+        # repository can download, so only a private caller bundles.
         run: |
-          plan="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --runner "$RUNNER_LABEL")"
+          plan="$(node "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/checks-matrix.mjs" --repo "$REPO" --runner "$RUNNER_LABEL")"
           echo "$plan" | jq .
           siblings="$(jq -r '[(.include[].sib, .scan.sib) | to_entries[] | select(.value != "") | "catenahq/" + .key] | unique | join(" ")' <<< "$plan")"
+          bundles="$(jq -c '[.include[].sib | to_entries[] | select(.value == "bundle") | .key] | unique' <<< "$plan")"
+          if [ "$bundles" != '[]' ] && [ "$PRIVATE" != true ]; then
+            echo "::error::a check reads a sibling with a token, and its bundle would be an artifact of this public repository"
+            exit 1
+          fi
+          if [ "$bundles" != '[]' ] && [ "$HAS_TOKEN" != true ]; then
+            echo "::error::a check reads a sibling with CATENA_EE_READ_TOKEN: pass it under secrets in the job that calls pr.yml"
+            exit 1
+          fi
           echo "matrix=$(jq -c '{include}' <<< "$plan")" >> "$GITHUB_OUTPUT"
           echo "scan=$(jq -c .scan <<< "$plan")" >> "$GITHUB_OUTPUT"
           echo "scan-enabled=$(jq -r .scan.enabled <<< "$plan")" >> "$GITHUB_OUTPUT"
           echo "siblings=$siblings" >> "$GITHUB_OUTPUT"
+          echo "bundles=$bundles" >> "$GITHUB_OUTPUT"
       - name: Same tree
         id: tree
         uses: ./.catena-ci/.github/actions/same-tree
@@ -76,6 +99,88 @@ jobs:
           siblings: ${{ steps.matrix.outputs.siblings }}
           lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
           wait-minutes: '0'
+          sibling-token: ${{ secrets.CATENA_EE_READ_TOKEN || github.token }}
+      # A sibling a check reads as a bundle: fetched with the token at the
+      # caller's lock, bundled at the commit checked out, and uploaded for
+      # check. One step per sibling the matrix parser knows (SIBLINGS in
+      # scripts/ci/checks-matrix.mjs).
+      - name: Fetch sibling catena-admin
+        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'catena-admin')
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-admin
+          path: siblings/catena-admin
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          token: ${{ secrets.CATENA_EE_READ_TOKEN }}
+          fetch-depth: '0'
+      - name: Fetch sibling catena-ce
+        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'catena-ce')
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-ce
+          path: siblings/catena-ce
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          token: ${{ secrets.CATENA_EE_READ_TOKEN }}
+          fetch-depth: '0'
+      - name: Fetch sibling catena-templates
+        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'catena-templates')
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/catena-templates
+          path: siblings/catena-templates
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          token: ${{ secrets.CATENA_EE_READ_TOKEN }}
+          fetch-depth: '0'
+      - name: Fetch sibling contracts
+        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'contracts')
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/contracts
+          path: siblings/contracts
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          token: ${{ secrets.CATENA_EE_READ_TOKEN }}
+          fetch-depth: '0'
+      - name: Fetch sibling docs
+        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'docs')
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/docs
+          path: siblings/docs
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          token: ${{ secrets.CATENA_EE_READ_TOKEN }}
+          fetch-depth: '0'
+      - name: Fetch sibling ops
+        if: steps.tree.outputs.run == 'true' && contains(fromJSON(steps.matrix.outputs.bundles), 'ops')
+        uses: ./.catena-ci/.github/actions/checkout-sibling
+        with:
+          repository: catenahq/ops
+          path: siblings/ops
+          lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
+          token: ${{ secrets.CATENA_EE_READ_TOKEN }}
+          fetch-depth: '0'
+      - name: Bundle the siblings
+        id: bundle
+        if: steps.tree.outputs.run == 'true' && steps.matrix.outputs.bundles != '[]'
+        env:
+          BUNDLES: ${{ steps.matrix.outputs.bundles }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sibling-bundles"
+          shas='{}'
+          for repo in $(jq -r '.[]' <<< "$BUNDLES"); do
+            git -C "siblings/$repo" bundle create "$RUNNER_TEMP/sibling-bundles/$repo.bundle" HEAD
+            sha="$(git -C "siblings/$repo" rev-parse HEAD)"
+            shas="$(jq -c --arg repo "$repo" --arg sha "$sha" '.[$repo] = $sha' <<< "$shas")"
+          done
+          echo "bundle-shas=$shas" >> "$GITHUB_OUTPUT"
+      - name: Upload the sibling bundles
+        if: steps.bundle.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sibling-bundles
+          path: ${{ runner.temp }}/sibling-bundles
+          retention-days: 1
+          if-no-files-found: error
 
   check:
     name: check (${{ matrix.name }})
@@ -105,9 +210,10 @@ jobs:
           path: .catena-ci
           persist-credentials: false
       # One step per sibling the matrix parser knows (SIBLINGS in
-      # scripts/ci/checks-matrix.mjs), each at the caller's lock.
+      # scripts/ci/checks-matrix.mjs), each at the caller's lock; a bundle
+      # sibling is cloned from plan's artifact below.
       - name: Check out sibling catena-admin
-        if: matrix.sib.catena-admin != ''
+        if: matrix.sib.catena-admin != '' && matrix.sib.catena-admin != 'bundle'
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/catena-admin
@@ -115,7 +221,7 @@ jobs:
           lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
           fetch-depth: ${{ matrix.sib.catena-admin }}
       - name: Check out sibling catena-ce
-        if: matrix.sib.catena-ce != ''
+        if: matrix.sib.catena-ce != '' && matrix.sib.catena-ce != 'bundle'
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/catena-ce
@@ -123,7 +229,7 @@ jobs:
           lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
           fetch-depth: ${{ matrix.sib.catena-ce }}
       - name: Check out sibling catena-templates
-        if: matrix.sib.catena-templates != ''
+        if: matrix.sib.catena-templates != '' && matrix.sib.catena-templates != 'bundle'
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/catena-templates
@@ -131,7 +237,7 @@ jobs:
           lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
           fetch-depth: ${{ matrix.sib.catena-templates }}
       - name: Check out sibling contracts
-        if: matrix.sib.contracts != ''
+        if: matrix.sib.contracts != '' && matrix.sib.contracts != 'bundle'
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/contracts
@@ -139,7 +245,7 @@ jobs:
           lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
           fetch-depth: ${{ matrix.sib.contracts }}
       - name: Check out sibling docs
-        if: matrix.sib.docs != ''
+        if: matrix.sib.docs != '' && matrix.sib.docs != 'bundle'
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/docs
@@ -147,13 +253,34 @@ jobs:
           lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
           fetch-depth: ${{ matrix.sib.docs }}
       - name: Check out sibling ops
-        if: matrix.sib.ops != ''
+        if: matrix.sib.ops != '' && matrix.sib.ops != 'bundle'
         uses: ./.catena-ci/.github/actions/checkout-sibling
         with:
           repository: catenahq/ops
           path: ws/ops
           lock: ws/${{ github.event.repository.name }}/.github/catenahq.lock
           fetch-depth: ${{ matrix.sib.ops }}
+      # A bundle sibling, at the commit plan bundled: no secret reaches this job.
+      - name: Download the sibling bundles
+        if: contains(matrix.sib.*, 'bundle')
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sibling-bundles
+          path: ${{ runner.temp }}/sibling-bundles
+      - name: Clone the sibling bundles
+        if: contains(matrix.sib.*, 'bundle')
+        working-directory: ${{ github.workspace }}
+        env:
+          SIB: ${{ toJSON(matrix.sib) }}
+          SHAS: ${{ needs.plan.outputs.bundle-shas }}
+        run: |
+          set -euo pipefail
+          for repo in $(jq -r 'to_entries[] | select(.value == "bundle") | .key' <<< "$SIB"); do
+            sha="$(jq -r --arg repo "$repo" '.[$repo]' <<< "$SHAS")"
+            echo "catenahq/$repo: $sha (bundle)"
+            git clone --quiet --no-checkout "$RUNNER_TEMP/sibling-bundles/$repo.bundle" "ws/$repo"
+            git -C "ws/$repo" checkout --quiet --detach "$sha"
+          done
       - if: matrix.tools.node != ''
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -166,8 +293,8 @@ jobs:
       - if: matrix.tools.go != ''
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: ${{ matrix.tools.go != 'go.mod' && matrix.tools.go || '' }}
-          go-version-file: ${{ matrix.tools.go == 'go.mod' && format('ws/{0}/go.mod', github.event.repository.name) || '' }}
+          go-version: ${{ matrix.tools.go-file == '' && matrix.tools.go || '' }}
+          go-version-file: ${{ matrix.tools.go-file }}
           cache: false
       - name: Install staticcheck
         if: matrix.tools.staticcheck != ''
