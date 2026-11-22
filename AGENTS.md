@@ -11,8 +11,9 @@ depends on. See README.md for the layout + consumer model.
 - Do not add app-specific copy, operator-only config, or anything
   with an unstable shape. Promote to a contract only once the same
   fact lives in two or more repos.
-- JSON files MUST parse cleanly + match their documented shape. CI
-  runs `node -e "JSON.parse(...)"` on every JSON file.
+- JSON files MUST parse cleanly + match their documented shape.
+  `scripts/validate-json.mjs` checks every JSON file; this repo's CI runs it
+  in the check `test` (`bash ci/run test`).
 - Bilingual content: every key with a string value carries `{en, fr}`
   side by side. No EN-only or FR-only contracts.
 - No emojis or em-dashes in any artifact. Plain hyphens + straight
@@ -62,7 +63,7 @@ unless it is a release channel listed in `BRANCH_ALLOW`
 | `.github/actions/scan/` | The steps of the `scan` and `scan-daily` jobs: the caller and its scan siblings, scanctl, the own-image build when an image input changed or on a schedule, `scanctl run`, the SARIF upload, the artifact and the pull request comment (README.md, "Scan"). |
 | `.github/actions/scanctl/` | Builds scanctl with `go build` at a commit, or from `ws/scanctl` in catenahq/scanctl. |
 | `.github/catenahq.lock` | The scanctl commit the scan builds, `catenahq/scanctl <sha> # main`. |
-| `scripts/ci/checks-matrix.mjs` | The parser `plan` runs with the caller's `--repo` and `--runner`: the matrix and the scan settings. A key it does not know fails, named; a sibling with a `token` is a `bundle`, and a scan sibling takes none. npm `yaml` is locked in `scripts/ci/package-lock.json`; a sibling or tool `pr.yml` gains is added to both, and a sibling to the scan action too. |
+| `scripts/ci/checks-matrix.mjs` | The parser `plan` runs with the caller's `--repo` and `--runner`: the matrix and the scan settings. A key it does not know fails, named; a sibling with a `token` is a `bundle`, the token is `CATENA_EE_READ_TOKEN` and no other secret, and a scan sibling takes none. With `--repo contracts` the gates run from the caller's own tree. npm `yaml` is locked in `scripts/ci/package-lock.json`; a sibling or tool `pr.yml` gains is added to both, and a sibling to the scan action too. |
 | `scripts/ci/reuse.mjs` | Per-check reuse in `pr.yml`: `plan` keys each entry and the scan on its inputs at the merge commit, its siblings' commits, `pr.yml`'s commit and, for the scan, the date, and drops those a passing run of the same key recorded; `record` computes the key in `check` and `scan` for the upload after a pass. A failed lookup fails the step (README.md, "Per-check reuse"). |
 | `scripts/sync-brand-assets.mjs` | Copies the logo into the consuming site's `public/favicon.svg`. Each site's `postinstall`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
