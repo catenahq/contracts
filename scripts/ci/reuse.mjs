@@ -148,7 +148,6 @@ function siblingResolver(env, lock) {
         TIP: "false",
         EVENT: env.GITHUB_EVENT_NAME ?? "",
         HEAD_REF: env.GITHUB_HEAD_REF ?? "",
-        BASE_REF: env.GITHUB_BASE_REF ?? "",
         REF_NAME: env.GITHUB_REF_NAME ?? "",
         REF_TYPE: env.GITHUB_REF_TYPE ?? "",
         DEFAULT_BRANCH: env.DEFAULT_BRANCH ?? "",

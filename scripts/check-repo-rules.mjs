@@ -69,7 +69,7 @@ for (const file of files.filter((f) => RUNTIME_FILES.includes(f) || RUNTIME_DIRS
   problems.push(`${file} is tracked aidevops runtime state, which no branch may hold; untrack it (git rm --cached)`);
 }
 
-const BRANCH = "(?:main|master|dev|develop)";
+const BRANCH = "(?:main|master|dev|develop|release)";
 // What runs: workflows, actions and scripts. Docs that show a command are
 // examples; tests exercise refs on purpose.
 const RUNS = /^\.github\/.*\.ya?ml$|(^|\/)action\.ya?ml$|\.(sh|bash|py|mjs|cjs|js|ts)$|(^|\/)Makefile$/;
@@ -86,27 +86,27 @@ const BRANCH_RULES = [
 const BRANCH_ALLOW = {
   "catena-ce": [
     [/^\.github\/workflows\/publish-installer\.yml$/,
-      "the installer publishes only release tags on main"],
+      "the installer publishes only release tags on release"],
   ],
   "catena-templates": [
     [/^(sources\/[^/]+\.json|catalog\.json|templates\.json)$/,
       "catalog descriptions link the blueprint READMEs on main, the channel hosts read"],
   ],
   ops: [
-    [/^automation\/helpers\/digest_sources\.py$/,
-      "the monthly digest reports what shipped, which is main"],
-    [/^create-catena-release\.sh$/,
-      "the release merges dev into main, tags main and fast-forwards dev onto it"],
     [/^release-lib\.sh$/,
-      "the release steps both release scripts share compare dev with main"],
+      "the release steps compare release with main: the fixes release holds, and main holding a merged-back tag"],
     [/^automation\/operator-tools\/release_gate\.py$/,
-      "the release gate proves the dev heads a release is made from"],
+      "the release gate proves the release heads a release is made from"],
     [/^automation\/operator-tools\/publish-scenario-catalogue\.py$/,
       "the release publishes the catalogue of the scenarios on main"],
   ],
+  "repertoire-entreprises": [
+    [/^\.github\/workflows\/publish-image\.yml$/,
+      "the image publishes only release tags on release"],
+  ],
   website: [
     [/^\.github\/workflows\/deploy-pages\.yml$/,
-      "the daily price refresh starts on the default branch and rebuilds the released site, which is main"],
+      "the daily price refresh starts the deploy on release, the branch the site deploys from"],
   ],
 };
 

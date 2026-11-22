@@ -134,13 +134,15 @@ function tools(where, value, { allowed = TOOL_KEYS, repo = "", sibs = null } = {
   return out;
 }
 
-function siblings(where, value, locked, secrets, allowed = SIBLING_KEYS) {
+// The caller itself is checked out under ws/<repo>, never as its own sibling.
+function siblings(where, value, locked, secrets, { allowed = SIBLING_KEYS, repo = "" } = {}) {
   const out = Object.fromEntries(SIBLINGS.map((s) => [s, ""]));
   if (value === undefined) return out;
   if (!isMap(value)) fail(`${where} must be a mapping`);
   for (const [name, spec] of Object.entries(value)) {
     const at = `${where}.${name}`;
     if (!SIBLINGS.includes(name)) fail(`${where}: unknown sibling '${name}' (known: ${SIBLINGS.join(", ")})`);
+    if (name === repo) fail(`${at}: ${OWNER}/${name} is this repository, checked out under ws/${name}`);
     if (!locked.has(`${OWNER}/${name}`)) fail(`${at}: ${OWNER}/${name} has no line in .github/catenahq.lock`);
     const s = spec === null ? {} : keysOf(at, spec, allowed);
     const depth = s["fetch-depth"] ?? 1;
@@ -166,7 +168,9 @@ function inputs(where, value) {
   return value;
 }
 
-function gatesEntry(value, locked, runner) {
+// The contracts gates run from the contracts checkout beside the caller, which
+// in contracts is the caller's own tree.
+function gatesEntry(value, locked, runner, repo) {
   const g = value === null ? {} : keysOf("gates", value, GATE_KEYS);
   const args = g["core-app-names"];
   if (args !== undefined) {
@@ -175,7 +179,8 @@ function gatesEntry(value, locked, runner) {
     }
   }
   if (g.duplication !== undefined && typeof g.duplication !== "boolean") fail("gates.duplication must be true or false");
-  if (!locked.has(`${OWNER}/contracts`)) fail(`gates: ${OWNER}/contracts has no line in .github/catenahq.lock`);
+  const own = repo === "contracts";
+  if (!own && !locked.has(`${OWNER}/contracts`)) fail(`gates: ${OWNER}/contracts has no line in .github/catenahq.lock`);
   return {
     name: "gates",
     kind: "gates",
@@ -184,7 +189,7 @@ function gatesEntry(value, locked, runner) {
     "go-cache": false,
     inputs: ["."],
     tools: { ...tools("gates", undefined), node: GATES_NODE },
-    sib: { ...siblings("gates", undefined, locked, []), contracts: "1" },
+    sib: { ...siblings("gates", undefined, locked, []), contracts: own ? "" : "1" },
     gates: { "core-app-names": args ?? [], duplication: g.duplication ?? false },
   };
 }
@@ -202,7 +207,7 @@ function checkEntry(name, value, locked, secrets, runner, repo, apps) {
   const goCache = c["go-cache"] ?? false;
   if (typeof goCache !== "boolean") fail(`${where}.go-cache must be true or false`);
   const paths = inputs(`${where}.inputs`, c.inputs);
-  const sib = siblings(`${where}.siblings`, c.siblings, locked, secrets);
+  const sib = siblings(`${where}.siblings`, c.siblings, locked, secrets, { repo });
   const sibs = Object.keys(sib).filter((s) => sib[s] !== "");
   const toolset = tools(`${where}.tools`, c.tools, { repo, sibs });
   if (goCache && toolset.go === "") fail(`${where}.go-cache needs tools.go: the caches are Go's`);
@@ -222,7 +227,7 @@ function checkEntry(name, value, locked, secrets, runner, repo, apps) {
 // The settings of the scan jobs; enabled is false when checks.yml has no scan
 // key. own-images is space-separated, as the scan action reads it. A scan
 // sibling takes no token: the scan jobs hold none.
-function scanEntry(value, locked) {
+function scanEntry(value, locked, repo) {
   const s = value === undefined || value === null ? {} : keysOf("scan", value, SCAN_KEYS);
   const profile = s.profile ?? "full";
   if (!SCAN_PROFILES.includes(profile)) fail(`scan.profile must be one of ${SCAN_PROFILES.join(", ")}`);
@@ -239,7 +244,7 @@ function scanEntry(value, locked) {
     profile,
     "own-images": own.join(" "),
     "image-inputs": s["image-inputs"] ?? [],
-    sib: siblings("scan.siblings", s.siblings, locked, [], ["fetch-depth"]),
+    sib: siblings("scan.siblings", s.siblings, locked, [], { allowed: ["fetch-depth"], repo }),
     tools: { go: tools("scan.tools", s.tools, { allowed: ["go"] }).go },
   };
 }
@@ -289,7 +294,7 @@ export function buildMatrix({ checks, lock, secrets, runner, repo }) {
   const locked = lockedRepos(lock);
   const apps = appsSettings(hasApps(doc), doc.apps, locked, runner);
   const include = [];
-  if (doc.gates !== undefined) include.push(gatesEntry(doc.gates, locked, runner));
+  if (doc.gates !== undefined) include.push(gatesEntry(doc.gates, locked, runner, repo));
   if (doc.checks !== undefined) {
     if (!isMap(doc.checks)) fail("checks must be a mapping of check names");
     for (const [name, value] of Object.entries(doc.checks)) {
@@ -298,7 +303,7 @@ export function buildMatrix({ checks, lock, secrets, runner, repo }) {
   }
   if (apps.enabled) include.push(apps.repo);
   if (include.length === 0) fail(".github/checks.yml names no gates, no check and no apps");
-  return { include, scan: scanEntry(doc.scan, locked), apps };
+  return { include, scan: scanEntry(doc.scan, locked, repo), apps };
 }
 
 function main(argv) {

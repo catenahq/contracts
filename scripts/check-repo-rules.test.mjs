@@ -87,6 +87,23 @@ try {
   git("rm", "-q", "--cached", ".agents/loop-state/x", ".agents/tmp/y/z", ".agents/memory/m.db", ".agents/.full-loop-cleanup-deferred");
   r = run();
   assert.equal(r.status, 0, r.out);
+
+  // release is a branch name: a workflow that checks it out or compares with it fails.
+  // The guard line is assembled, so this file does not hold the ref it tests.
+  const guard = `        run: git merge-base --is-ancestor "$SHA" ${"origin/"}release\n`;
+  git("remote", "add", "origin", "https://github.com/catenahq/catena-ce.git");
+  put(".github/workflows/build.yml", "      - uses: x\n        with:\n          ref: release\n");
+  put(".github/workflows/guard.yml", guard);
+  r = run();
+  assert.equal(r.status, 1, r.out);
+  assert.ok(r.out.includes(".github/workflows/build.yml:3: branch name in a checkout ref"), r.out);
+  assert.ok(r.out.includes(".github/workflows/guard.yml:1: branch name in a compared ref"), r.out);
+  git("rm", "-q", "--cached", ".github/workflows/build.yml", ".github/workflows/guard.yml");
+
+  // The publish guard of a release channel names release on purpose.
+  put(".github/workflows/publish-installer.yml", guard);
+  r = run();
+  assert.equal(r.status, 0, r.out);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

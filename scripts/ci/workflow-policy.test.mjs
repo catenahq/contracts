@@ -126,8 +126,8 @@ const sub = (from, to) => (text) => {
   return text.replace(from, to);
 };
 const add = (text) => (before) => before + text;
-const check = (dir, { zizmor = "0", fail = [], tokens = {}, env = {} } = {}) =>
-  run(["check", "--repo", REPO, "--sha", HEAD, "--dir", dir, "--zizmor", zizmor], { get: COMPARE, fail, tokens }, env);
+const check = (dir, { zizmor = "0", fail = [], tokens = {}, env = {}, repo = REPO } = {}) =>
+  run(["check", "--repo", repo, "--sha", HEAD, "--dir", dir, "--zizmor", zizmor], { get: COMPARE, fail, tokens }, env);
 
 function expectStatus(label, got, state, description) {
   assert.deepEqual(
@@ -296,6 +296,25 @@ try {
     [`${W}ci-control.yml`]: add("    runs-on: catena-ci\n    steps:\n      - run: echo control\n"),
   });
 
+  // catenahq/contracts calls its own pr.yml and control.yml by the local path;
+  // another repository, or another local workflow, cannot.
+  const LOCAL = {
+    [`${W}ci.yml`]: sub(`catenahq/contracts/.github/workflows/pr.yml@${ON_MAIN} # main`, "./.github/workflows/pr.yml"),
+    [`${W}ci-control.yml`]: sub(`catenahq/contracts/.github/workflows/control.yml@${ON_MAIN} # main`, "./.github/workflows/control.yml"),
+  };
+  passes("contracts' local callers", LOCAL);
+  fails("ci-control calling another local workflow", "ci-control", "job control does not call catenahq/contracts/.github/workflows/control.yml", {
+    [`${W}ci-control.yml`]: sub(`catenahq/contracts/.github/workflows/control.yml@${ON_MAIN} # main`, "./.github/workflows/pr.yml"),
+  });
+  {
+    const got = check(tree(LOCAL), { repo: "catenahq/ops" });
+    assert.equal(got.status, 1, `${got.out}\n${got.err}`);
+    for (const said of [
+      "ci-gate: .github/workflows/ci.yml: job ci (name 'ci') can yield the check name ci / gate",
+      "ci-control: .github/workflows/ci-control.yml: job control does not call catenahq/contracts/.github/workflows/control.yml",
+    ]) assert.ok(got.out.includes(said), `local callers outside contracts: '${said}' not in\n${got.out}`);
+  }
+
   fails("zizmor findings", "zizmor", "scanctl exited 1", {}, { zizmor: "1" });
 
   // fetch: every file under .github/ and every changed file that is not
@@ -357,6 +376,11 @@ try {
   const reshaped = run(fetchArgs, { ...fetchState, raw: { ...fetchState.raw, [raw(HEAD, ".github/workflows/ci-control.yml")]: otherShape } });
   assert.equal(reshaped.status, 0, reshaped.err);
   assert.equal(read("pr/.github/workflows/ci-control.yml"), otherShape);
+  // contracts' local caller has the caller shape and ignores dangerous-triggers too.
+  const localCaller = CALLER.replace(`catenahq/contracts/.github/workflows/control.yml@${ON_MAIN} # main`, "./.github/workflows/control.yml");
+  const local = run(fetchArgs, { ...fetchState, raw: { ...fetchState.raw, [raw(HEAD, ".github/workflows/ci-control.yml")]: localCaller } });
+  assert.equal(local.status, 0, local.err);
+  assert.ok(read("pr/.github/workflows/ci-control.yml").includes("  workflow_run: # zizmor: ignore[dangerous-triggers]\n"));
   for (const gone of ["pr/.github/link", "pr/old", "base/.github/actions"]) assert.ok(!existsSync(join(out, gone)), gone);
   assert.equal(JSON.parse(read("changed.json")).length, 102);
 

@@ -131,16 +131,6 @@
       "security-events": "write",
       "statuses": "write"
     },
-    "contracts:ci.yml:duplication": {
-      "contents": "read"
-    },
-    "contracts:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "contracts:ci.yml:validate": {
-      "contents": "read"
-    },
     "contracts:control.yml:depends": {
       "checks": "read",
       "contents": "read",
@@ -193,12 +183,6 @@
     "contracts:pr.yml:scan-daily": {
       "contents": "read",
       "issues": "write",
-      "pull-requests": "write",
-      "security-events": "write"
-    },
-    "contracts:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
       "pull-requests": "write",
       "security-events": "write"
     },

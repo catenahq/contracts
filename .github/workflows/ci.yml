@@ -1,117 +1,22 @@
-name: CI
-
-# Validates every artifact in this repo:
-#   - JSON files parse
-#   - brand/test.js smoke test passes
-#   - JSON files match their documented shape (basic key presence
-#     + types; full schema validation is a follow-up)
-#
-# A push to the default branch keeps the absolute gate. A pull request is judged on what
-# it introduces: the validation steps and the duplication ratchet run through
-# this repo's new-failures-only action, which fails only on failures the base
-# commit does not have.
-
+name: ci
 on:
-  # A change is checked once, on its pull request, Renovate's included. A push
-  # runs the checks only on the default branch.
-  push:
-    branches: [main]
   pull_request:
-
-permissions:
-  contents: read
-
-# A newer push to the branch, or a newer commit of the pull request, cancels the
-# run it supersedes.
+    types: [opened, synchronize, reopened, ready_for_review]
+  schedule:
+    - cron: '11 6 * * *'
+permissions: {}
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
-  same-tree:
-    # Reuses the result of an earlier run on the same tree; every job below
-    # needs it.
-    name: same tree (ci)
-    runs-on: ubuntu-26.04
+  ci:
+    uses: ./.github/workflows/pr.yml
     permissions:
       contents: read
       actions: read
-    outputs:
-      run: ${{ steps.tree.outputs.run }}
-    steps:
-      - id: tree
-        uses: catenahq/contracts/.github/actions/same-tree@main
-
-  validate:
-    name: Validate contracts
-    needs: same-tree
-    if: needs.same-tree.outputs.run != 'false'
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: "26"
-      - name: Unicode hygiene (no em dashes / smart quotes / decorative symbols)
-        # A finding is its file, its kind and its line's text: the sed drops
-        # the line number, so a moved line is not a new finding.
-        uses: catenahq/contracts/.github/actions/new-failures-only@main
-        with:
-          working-directory: ${{ github.workspace }}
-          repo-path: ${{ github.workspace }}
-          failure-lines: '^  [^ :]+: .*'
-          run: |
-            node scripts/check-unicode.mjs 2>&1 \
-              | sed -E '/^  [^ :]+:[0-9]+: /{N;s/^(  [^ :]+):[0-9]+: ([^\n]*)\n +(.*)$/\1: \2 | \3/}'
-      - name: Repo rules, brand smoke test, JSON artifacts and script tests
-        # Script tests: comment parsers, the gates on a deleted tracked file,
-        # the new-failures-only and same-tree scripts, the checks matrix, the gate status,
-        # the per-check reuse, the updater, the app checks, the app dispatch and tag,
-        # the release steps, the workflow policy.
-        uses: catenahq/contracts/.github/actions/new-failures-only@main
-        with:
-          working-directory: ${{ github.workspace }}
-          repo-path: ${{ github.workspace }}
-          run: |
-            npm ci --prefix scripts/ci --ignore-scripts --no-audit --no-fund
-            node scripts/check-repo-rules.mjs
-            node brand/test.js
-            node scripts/validate-json.mjs
-            node scripts/lib/yaml-comments.test.mjs
-            node scripts/lib/shell-comments.test.mjs
-            node scripts/gates.test.mjs
-            node scripts/new-failures-only.test.mjs
-            node scripts/same-tree.test.mjs
-            node scripts/check-core-app-names.test.mjs
-            node scripts/ci/checks-matrix.test.mjs
-            node scripts/ci/gate-status.test.mjs
-            node scripts/ci/reuse.test.mjs
-            node scripts/ci/update.test.mjs
-            node scripts/ci/app-check.test.mjs
-            node scripts/ci/app-dispatch-tag.test.mjs
-            node scripts/ci/release.test.mjs
-            node scripts/ci/workflow-policy.test.mjs
-
-  duplication:
-    # Copy-paste ratchet: .jscpd.json carries the baseline threshold;
-    # exceeding it fails. Lower the threshold as duplication is paid
-    # down, never raise it to admit new copy-paste.
-    name: Duplication (jscpd)
-    needs: same-tree
-    if: needs.same-tree.outputs.run != 'false'
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: "26"
-      - name: jscpd (threshold in .jscpd.json)
-        uses: catenahq/contracts/.github/actions/new-failures-only@main
-        with:
-          working-directory: ${{ github.workspace }}
-          repo-path: ${{ github.workspace }}
-          run: npx --yes jscpd@4 --silent
+      statuses: write
+      pull-requests: write
+      security-events: write
+      issues: write
+    with:
+      runner: ubuntu-26.04

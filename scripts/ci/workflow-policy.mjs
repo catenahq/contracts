@@ -79,17 +79,25 @@ export const secretNames = (text) => [...text.matchAll(SECRET_REF)].map((m) => m
 // without regard to case.
 const lowerRepo = (uses) => uses.replace(/^[^/@\s]+\/[^/@\s]+/, (s) => s.toLowerCase());
 
+// A caller in catenahq/contracts calls its own pr.yml or control.yml by the
+// local path, which takes no ref: GitHub runs the called file of the caller's
+// commit, on pull_request_target the last commit of the default branch.
+const localCall = (repo, uses, file) =>
+  repo.toLowerCase() === `${OWNER}/contracts` && uses === `./.github/workflows/${file}`;
+
 // How a ci-control.yml differs from the caller shape: one job that calls
-// control.yml of contracts at a 40-hex commit, with no key but CALLER_KEYS.
-function callerShape(doc, owner) {
+// control.yml of contracts at a 40-hex commit (contracts: by the local path),
+// with no key but CALLER_KEYS.
+function callerShape(doc, repo) {
   const ids = isObject(doc?.jobs) ? Object.keys(doc.jobs) : [];
   if (ids.length !== 1) return [`has ${ids.length} jobs; the caller has one`];
   const [id] = ids;
   const job = doc.jobs[id];
   if (!isObject(job)) return [`job ${id} is not a mapping`];
   const problems = [];
+  const owner = repo.split("/")[0];
   const control = new RegExp(`^${escape(owner.toLowerCase())}/contracts/\\.github/workflows/control\\.yml@[0-9a-f]{40}$`);
-  if (typeof job.uses !== "string" || !control.test(lowerRepo(job.uses))) {
+  if (typeof job.uses !== "string" || !(control.test(lowerRepo(job.uses)) || localCall(repo, job.uses, "control.yml"))) {
     problems.push(`job ${id} does not call ${owner}/contracts/.github/workflows/control.yml at a 40-hex commit`);
   }
   const extra = Object.keys(job).filter((k) => !CALLER_KEYS.includes(k));
@@ -143,14 +151,14 @@ function download(repo, sha, paths, dir) {
 // The head as zizmor reads it: no inline zizmor directive of the pull request
 // counts, and a ci-control.yml of the caller shape ignores dangerous-triggers
 // on its pull_request_target and workflow_run lines.
-function prepareZizmor(dir, owner) {
+function prepareZizmor(dir, repo) {
   for (const path of listFiles(join(dir, ".github"), ".github")) {
     if (!WORKFLOW.test(path) && !ACTION.test(path)) continue;
     const file = join(dir, path);
     let text = readFileSync(file, "utf-8").replace(ZIZMOR_DIRECTIVE, "# dropped-zizmor-directive:");
     if (path === CI_CONTROL) {
       const doc = parseDocument(text);
-      if (!doc.errors.length && !callerShape(doc.toJS(), owner).length) {
+      if (!doc.errors.length && !callerShape(doc.toJS(), repo).length) {
         text = text.replace(CALLER_TRIGGERS, "$1 # zizmor: ignore[dangerous-triggers]");
       }
     }
@@ -164,7 +172,7 @@ export function fetchFiles({ repo, pr, head, base, dir }) {
   const paths = new Set(githubFiles(repo, head));
   for (const f of changed) if (f.status !== "removed") paths.add(f.path);
   download(repo, head, [...paths].sort(), join(dir, "pr"));
-  prepareZizmor(join(dir, "pr"), repo.split("/")[0]);
+  prepareZizmor(join(dir, "pr"), repo);
   download(repo, base, githubFiles(repo, base).filter((p) => WORKFLOW.test(p)), join(dir, "base"));
   writeFileSync(join(dir, "changed.json"), `${JSON.stringify(changed)}\n`);
   return { files: paths.size, changed: changed.length };
@@ -398,10 +406,10 @@ function ruleGateNeeds(head, base, report) {
 const canBe = (name, target) => new RegExp(`^${name.split(/\$\{\{.*?\}\}/).map(escape).join(".*")}$`).test(target);
 
 // Only the job ci of ci.yml, calling pr.yml of contracts, yields `ci / gate`.
-function ruleCiGate(workflows, owner, repoName, report) {
+function ruleCiGate(workflows, repo, report) {
+  const owner = repo.split("/")[0];
   const prYml = (uses) =>
-    lowerRepo(uses).startsWith(`${owner.toLowerCase()}/contracts/.github/workflows/pr.yml@`) ||
-    (repoName === "contracts" && uses === "./.github/workflows/pr.yml");
+    lowerRepo(uses).startsWith(`${owner.toLowerCase()}/contracts/.github/workflows/pr.yml@`) || localCall(repo, uses, "pr.yml");
   for (const [path, { doc }] of workflows) {
     for (const [id, job] of jobsOf(doc)) {
       const name = String(job.name ?? id);
@@ -428,9 +436,9 @@ export function evaluate({ repo, dir, zizmor, policy }) {
   rulePullRequestTarget(workflows, report);
   ruleSecrets(files, policy, report);
   ruleGateNeeds(workflows, baseWorkflows, report);
-  ruleCiGate(workflows, owner, repoName, report);
+  ruleCiGate(workflows, repo, report);
   if (workflows.has(CI_CONTROL)) {
-    for (const problem of callerShape(workflows.get(CI_CONTROL).doc, owner)) report("ci-control", CI_CONTROL, problem);
+    for (const problem of callerShape(workflows.get(CI_CONTROL).doc, repo)) report("ci-control", CI_CONTROL, problem);
   }
   if (zizmor !== "0") report("zizmor", ".github", `scanctl exited ${zizmor}; its zizmor findings are in the summary`);
   const changed = JSON.parse(readFileSync(join(dir, "changed.json"), "utf-8"));

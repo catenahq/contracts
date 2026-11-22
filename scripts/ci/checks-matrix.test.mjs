@@ -1,4 +1,4 @@
-// checks-matrix.mjs over the checks.yml of ci-runner, catena-admin and ops,
+// checks-matrix.mjs over the checks.yml of ci-runner, catena-admin, ops and contracts,
 // their scan settings, the app checks, and each key it refuses. Run with `node scripts/ci/checks-matrix.test.mjs`
 // after `npm ci --prefix scripts/ci`.
 import { strict as assert } from "node:assert";
@@ -188,6 +188,24 @@ refuses({}, "checks.python.siblings.catena-admin.token: CATENA_EE_READ_TOKEN is 
       "scan:\n  tools: {go: catena-admin/go.mod}\n  siblings: {catena-admin: {}}\n"),
     /scan\.tools\.go must be go\.mod or an exact version/,
   );
+}
+
+// contracts: the gates run from its own tree, so its lock needs no contracts
+// line and the gates entry checks no sibling out; no repository is its own
+// sibling, under checks or scan.
+{
+  const own = (checks) =>
+    buildMatrix({ checks, lock: "catenahq/scanctl 0eae3213e08b7c6b1ad1fda1776126b869f38f1c # main\n", secrets: [], runner: "ubuntu-26.04", repo: "contracts" });
+  const { include: [gates, test], scan } = own("gates: {duplication: true}\nchecks:\n  test:\n    tools: {node: 26.13.1}\nscan: {}\n");
+  assert.deepEqual(gates, {
+    name: "gates", kind: "gates", "runs-on": "ubuntu-26.04", timeout: 20, "go-cache": false, inputs: ["."],
+    tools: { ...NO_TOOLS, node: "26" }, sib: NO_SIB, gates: { "core-app-names": [], duplication: true },
+  });
+  assert.deepEqual(test.sib, NO_SIB);
+  assert.equal(scan.enabled, true);
+  assert.throws(() => own("checks:\n  test:\n    siblings: {contracts: {}}\n"), /checks\.test\.siblings\.contracts: catenahq\/contracts is this repository/);
+  assert.throws(() => own("gates: {}\nscan: {siblings: {contracts: {}}}\n"), /scan\.siblings\.contracts: catenahq\/contracts is this repository/);
+  refuses({ checks: "checks:\n  python:\n    siblings: {ops: {}}\n" }, "checks.python.siblings.ops: catenahq/ops is this repository", "ops");
 }
 
 // An empty scan key scans the tree with profile full and builds no image.

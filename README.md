@@ -43,22 +43,20 @@ sibling, so a push to a sibling changes no open pull request's result there:
 catenahq/<repo> <40-hex sha> # <branch the sha was read from>
 ```
 
-Blank lines and lines starting with `#` are ignored. With the lock,
-checkout-sibling takes the sibling's branch of the same name as the run's
-branch when the sibling has it and a bot did not name it (`renovate/`,
+Blank lines and lines starting with `#` are ignored. checkout-sibling takes
+the sibling's branch of the same name as the run's branch (a pull request's
+head branch) when the sibling has it and a bot did not name it (`renovate/`,
 `engine-bump/`, `scanctl/`, `merge-back/`), else the pinned commit; the base
-branch and the default branch do not apply. A lock without a line for the
-requested sibling, or with a malformed line, fails the step. The `lock`
-input names the file when it is not `.github/catenahq.lock` under the
-workspace root (a consumer checked out under `ws/<repo>` passes
-`ws/<repo>/.github/catenahq.lock`). The input `tip: 'true'` takes the
-sibling's default branch and ignores the lock. The `ref` output is the
-branch or the commit checked out.
-
-With no lock file the checkout is at the branch the consumer runs on when
-this repo has it and a bot did not name it, else on a pull request at the
-base branch, else at the default branch. A run on its own repository's
-default branch takes the default branch here too.
+branch and the default branch do not apply, and a run on its own
+repository's default branch takes the pinned commit. A missing lock file, a
+lock without a line for the requested sibling, or one with a malformed line,
+fails the step. The `lock` input names the file when it is not
+`.github/catenahq.lock` under the workspace root (a consumer checked out
+under `ws/<repo>` passes `ws/<repo>/.github/catenahq.lock`). The input `tip:
+'true'` takes the sibling's default branch and ignores the lock. The `ref`
+output is the branch or the commit checked out.
+`scripts/checkout-sibling.test.mjs` drives `resolve.sh`, which picks the
+ref, with a `git` stub on `PATH`.
 
 The scripts under `scripts/` (unicode, prose, repo-rule and core-app-name
 gates, and the brand-asset sync each site runs on install) run from that
@@ -90,139 +88,6 @@ CSS:
 ```css
 @import "@catenahq/contracts/brand/tokens/all.css";
 ```
-
-## Changes fail only on new failures
-
-`.github/actions/new-failures-only` runs a gate command so that a change is
-judged on what it introduces. The base commit is the `base` input; else, on a
-pull request, the first parent of the merge commit checked out at `repo-path`
-(the current tip of the base branch, read from the raw commit so a 1-deep
-clone works); else, when the checkout is not that merge commit, the event's
-`base.sha`, which can be an older commit of the base branch. With none (a push
-without `base`) the command runs and
-its exit status is the verdict: the absolute gate. With a base the command
-runs at the head and passes if it passes. If it fails, the action fetches the
-base commit (depth 1), checks it
-out detached in `repo-path`, runs the command again, and checks the head
-back out. The job then fails only when the head output has a failure line the
-base output lacks. New lines print as `::error::`, lines the base carries as
-`::warning::`, and a summary line gives the counts. Untracked files in
-`repo-path` are removed before each checkout; nested repositories (sibling
-checkouts) and ignored files stay.
-
-| Input | Meaning |
-| --- | --- |
-| `run` | Required. The gate command (multi-line allowed), run with `bash -eo pipefail`; output is shown live. |
-| `working-directory` | Where `run` runs. Default `.`. |
-| `repo-path` | Required. The checkout that moves to the base commit. |
-| `failure-lines` | Extended regex. Each matched part of an output line is one failure's identity, so a regex that stops before a timing or a line number keeps identities stable between runs. Empty (or no match in the head output): the exit status alone, and a failing base passes the pull request. |
-| `base` | The commit the change is judged from. Empty: on a pull request, the first parent of the merge commit checked out at `repo-path`, else the event's base commit; any other event keeps the absolute gate. |
-| `token` | Fetches the base commit (default `github.token`; sent as an http extraheader on that one fetch). |
-
-```yaml
-      - uses: catenahq/contracts/.github/actions/new-failures-only@main
-        with:
-          working-directory: catena-admin
-          repo-path: catena-admin
-          failure-lines: '^--- FAIL: [^ ]+|^FAIL[[:space:]]+[^[:space:]]+'
-          run: go test ./...
-```
-
-`scripts/new-failures-only.test.mjs` drives the action's script
-(`new-failures-only.sh`) over a scratch repository.
-
-## Runs once per tree
-
-`.github/actions/same-tree` lets a workflow skip code it has already judged.
-A first job runs it; every other job needs that job and runs only when its
-`run` output is not `false`.
-
-The key is `tree=<tree>`, then `base=<base tree>` with `judge-change`, then
-one `<owner/name>=<sha>` line per sibling, sorted, naming the commit at the
-commit `checkout-sibling/resolve.sh` picks from the lock, else the tip of the
-branch it picks (the default branch when it picks none), read with
-`git ls-remote`. Trees and parents come from the commits API, so no checkout is needed.
-The job has no checkout, so the lock is the repository's
-`.github/catenahq.lock` at each judged commit, read through the contents API:
-each commit's key names the commits its own lock pins, the same ones a job
-checked out at that commit gets. A 404 means the commit has no lock and the
-branch tips key the siblings; any other failure of that read fails the step.
-The `lock` input, or a lock file under the workspace, is read instead; `tip`
-reads no lock.
-A run that does its checks records the key as an artifact named
-`same-tree.<name>.<first 40 hex of sha256(key)>`, kept 30 days.
-
-Only a push or a pull_request run reuses: on any other event `github.sha` is
-not the code the run judges. It lists the artifacts of the record name, newest
-first, and takes the first whose run:
-- is not expired, is of this repository (never a fork's), and is not this run;
-- ran `workflow`, from an event in `source-events`;
-- has a head commit with the key's tree and, with `judge-change`, a first
-  parent with the key's base tree. Any run of the repository can upload an
-  artifact of any name, so the record alone proves nothing. A pull_request
-  run's head is the pull request's head, so it counts only when that head has
-  the merge commit's tree, which is when the pull request is up to date with
-  its base;
-- completed with `success` (a failure, cancelled, skipped or timed out run is
-  not a result, so a failure is never reused). A success carries between a push
-  and a pull request.
-
-A found success sets `run` to `false`, prints
-`::notice::same tree as <url> (<state>): nothing ran` and writes the job
-summary. A source still going is waited for, polled every 30 seconds, up to
-`wait-minutes`; with no record yet, so is a push run of the checked commit and,
-on a pull request, of its head when that head has the merge commit's tree. A
-waited push run that fails leaves a pull request to run its own checks. Any
-API error means no result: the checks run, with a warning. A failed record
-upload does not fail the job.
-
-| Input | Meaning |
-| --- | --- |
-| `name` | Record name. Default the stem of the calling workflow file (the caller's in a reusable workflow). |
-| `workflow` | The file the source must have run. Default the caller's. |
-| `commits` | Lines of `<sha> [<base sha>]`. Default `github.sha` (the merge commit on a pull request). With several, `results` lists those with a result, the step never fails and nothing is recorded. |
-| `judge-change` | `true` adds the base tree to the key: the line's base, else the first parent. |
-| `siblings` | owner/name list: every repository the workflow checks out with checkout-sibling; the commit each checkout gets joins the key. |
-| `branch` | Passed to the sibling resolution in place of the run's branch (a tag push has none). |
-| `lock` | Passed to the sibling resolution as checkout-sibling's `lock` input. Empty: the lock file under the workspace when it exists, else the lock at each judged commit, read through the API. |
-| `tip` | Passed to the sibling resolution as checkout-sibling's `tip` input. |
-| `source-events` | Events a source run may have. Default `push pull_request schedule`. |
-| `wait-minutes` | Default 30 on a `pull_request`, 0 on other events, so a push never waits. |
-| `record` | Default `true`: a single commit that runs on a push, pull request or schedule is recorded. |
-| `token` | Reads this repository's runs, artifacts, commits and lock. Default `github.token`; the job grants `contents: read` and `actions: read`. |
-| `sibling-token` | Reads the siblings' branches. Default `github.token`; a private sibling needs the token the workflow's checkout-sibling steps pass. |
-
-| Output | Meaning |
-| --- | --- |
-| `run` | `true` when the checks run, `false` when a result is reused. |
-| `state` | `success` when reused, else empty. |
-| `source` | The URL of the reused run. |
-| `results` | Lines of `<sha> <state> <url>`, one per commit with a result. |
-
-```yaml
-  same-tree:
-    name: same tree (ci)
-    runs-on: ubuntu-26.04
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      run: ${{ steps.tree.outputs.run }}
-    steps:
-      - id: tree
-        uses: catenahq/contracts/.github/actions/same-tree@main
-        with:
-          siblings: catenahq/contracts
-  test:
-    needs: same-tree
-    if: needs.same-tree.outputs.run != 'false'
-```
-
-The runner needs `gh`, `git` and `sha256sum`. `scripts/same-tree.test.mjs`
-drives `same-tree.sh` and `resolve.sh` with stubs for `gh`, `git`, `date` and
-`sleep`. The `gh` stub serves API payloads and applies the script's `--jq`
-projections with a small evaluator of the jq they use, which the test checks
-against payloads and outputs recorded from `gh api`.
 
 ## Shared PR workflow
 
@@ -257,6 +122,18 @@ jobs:
 GitHub refuses to start a run whose called jobs ask for a permission the caller
 does not grant, so the caller grants every permission a job of `pr.yml` asks
 for, a scan job's included, whether or not the scan runs.
+
+This repository's own `ci.yml` and `ci-control.yml` have the same shape and
+call `./.github/workflows/pr.yml` and `./.github/workflows/control.yml`. A
+local path takes no ref: GitHub runs the called file of the caller's own
+commit (GitHub's workflow syntax, `jobs.<job_id>.uses`), so a pull request
+here runs the `pr.yml` it changes. A `pull_request_target` run takes the
+caller from the last commit of the default branch (GitHub's events that
+trigger workflows), so `control.yml` is that commit's, never the pull
+request's.
+Its `.github/checks.yml` has `gates` (with `duplication`), the check `test`
+(`bash ci/run test`: `npm ci --prefix scripts/ci`, then `npm test`) and
+`scan: {}`.
 
 The input `runner` is the label of `plan`, `gate`, the scan jobs and every
 check that names no `runs-on`. These jobs run:
@@ -326,8 +203,9 @@ apps:                        # absent: no app checks
 ```
 
 A sibling is one of `catena-admin`, `catena-ce`, `catena-templates`,
-`contracts`, `docs` and `ops`, and needs a line in the caller's lock; `gates`
-needs the contracts line. A check sibling's `token` must name a secret `pr.yml`
+`contracts`, `docs` and `ops`, other than the caller, and needs a line in the
+caller's lock; `gates` needs the contracts line, except in contracts, whose
+gates run from its own tree. A check sibling's `token` must name a secret `pr.yml`
 declares in `on.workflow_call.secrets`: `CATENA_EE_READ_TOKEN`. A scan sibling
 takes no `token`. A check's `go: <sibling>/go.mod` needs that sibling in the
 check's `siblings`. A check with `go-cache: true` needs `tools.go`. No check may
@@ -639,7 +517,7 @@ jobs:
       version: ${{ inputs.version }}
 ```
 
-`pull_request_target` and `workflow_run` run the file of the base branch, never
+`pull_request_target` and `workflow_run` run the file of the default branch, never
 the pull request's code: every job loads the CI code from contracts at
 `job.workflow_sha` under `.catena-ci/`, and only `dispatch` checks the pull
 request out, as data its tools read (see "App dispatch"). The workflow declares
@@ -936,12 +814,15 @@ The rules, each named in the summary:
 - `gate-needs`: in each base workflow with a `gate` job, `gate` and every job it
   needs stay, stay in its `needs`, get no new `continue-on-error`, and keep
   their `if:`.
-- `ci-gate`: only the job `ci` of `ci.yml`, calling contracts' `pr.yml`, can
+- `ci-gate`: only the job `ci` of `ci.yml`, calling contracts' `pr.yml`
+  (in catenahq/contracts alone, also `./.github/workflows/pr.yml`), can
   yield the check name `ci / gate`; a job name with an expression can be
   anything.
 - `ci-control`: a `.github/workflows/ci-control.yml` is the caller shape: one
   job, calling `<owner>/contracts/.github/workflows/control.yml` at a 40-hex
-  commit, with no key but `uses`, `permissions` and `with` (no steps).
+  commit (in catenahq/contracts alone, also `./.github/workflows/control.yml`,
+  see "Shared PR workflow"), with no key but `uses`, `permissions` and `with`
+  (no steps).
 - `zizmor`: scanctl passed.
 
 The summary also lists each changed path that runs in CI or decides what

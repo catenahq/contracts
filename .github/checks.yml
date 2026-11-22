@@ -1,0 +1,6 @@
+gates:
+  duplication: true
+checks:
+  test:
+    tools: {node: 26.13.1}
+scan: {}

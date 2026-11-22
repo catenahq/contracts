@@ -1,10 +1,9 @@
 name: checkout-sibling
 description: >-
-  Check out a sibling catenahq repo. With a lock file in the consumer, the
-  sibling's branch of the same name when it has one and a bot did not name it,
-  else the commit the lock pins. With none, the branch this run is on: the
-  sibling's branch of the same name when it has one and a bot did not name it;
-  on a pull request, then the base branch; else the sibling's default branch.
+  Check out a sibling catenahq repo at the consumer's lock: the sibling's branch
+  of the same name as the run's when it has one and a bot did not name it, else
+  the commit the lock pins. A lock that is missing or has no line for the
+  sibling fails.
 
 inputs:
   repository:
@@ -21,7 +20,7 @@ inputs:
   lock:
     description: >-
       The consumer's lock file (lines of "<owner/name> <sha> # <branch>"). Empty:
-      .github/catenahq.lock under the workspace root, used when it exists.
+      .github/catenahq.lock under the workspace root.
     default: ''
   tip:
     description: "'true' checks out the sibling's default branch and ignores the lock."
@@ -54,7 +53,6 @@ runs:
         TIP: ${{ inputs.tip }}
         EVENT: ${{ github.event_name }}
         HEAD_REF: ${{ github.head_ref }}
-        BASE_REF: ${{ github.base_ref }}
         REF_NAME: ${{ github.ref_name }}
         REF_TYPE: ${{ github.ref_type }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
