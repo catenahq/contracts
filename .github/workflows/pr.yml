@@ -296,6 +296,49 @@ jobs:
           go-version: ${{ matrix.tools.go-file == '' && matrix.tools.go || '' }}
           go-version-file: ${{ matrix.tools.go-file }}
           cache: false
+      # The Go build and module caches of a check with go-cache. A run restores
+      # the newest entry with the go.sum beside the go file, else the newest of
+      # any; only a scheduled run saves (the last step), so a pull request run
+      # never writes a cache another run restores.
+      - name: Go toolchain
+        id: go-env
+        if: matrix.go-cache
+        env:
+          GO_FILE: ${{ matrix.tools.go-file }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          go version
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          if [ -n "$GO_FILE" ]; then
+            echo "gosum=$(dirname "$GO_FILE")/go.sum" >> "$GITHUB_OUTPUT"
+          else
+            echo "gosum=ws/$REPO/go.sum" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Restore the Go build and module caches
+        if: matrix.go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-${{ hashFiles(steps.go-env.outputs.gosum) }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            go-${{ hashFiles(steps.go-env.outputs.gosum) }}-
+            go-
+      - name: Bound the Go build cache
+        # Go drops entries unused for five days; a build cache over 3 GiB is
+        # emptied, so one saved entry stays a small share of the repository's
+        # 10 GB of Actions cache.
+        if: matrix.go-cache
+        run: |
+          dir="$(go env GOCACHE)"
+          size_mb="$(du -sm "$dir" 2>/dev/null | cut -f1)"
+          echo "Go build cache: ${size_mb:-0} MB"
+          if [ "${size_mb:-0}" -gt 3072 ]; then
+            go clean -cache
+            echo "Over 3072 MB: emptied."
+          fi
       - name: Install staticcheck
         if: matrix.tools.staticcheck != ''
         working-directory: ${{ runner.temp }}
@@ -342,6 +385,17 @@ jobs:
         env:
           CHECK: ${{ matrix.name }}
         run: bash ci/run "$CHECK"
+      # A scheduled run runs every check (a schedule never reuses a result), so
+      # the daily run refreshes the cache. A failed check saves too: Go writes
+      # only finished build outputs to its cache.
+      - name: Save the Go build and module caches
+        if: ${{ !cancelled() && github.event_name == 'schedule' && matrix.go-cache && steps.go-env.outcome == 'success' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-${{ hashFiles(steps.go-env.outputs.gosum) }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   scan:
     # scanctl over the caller's tree and own images (.github/actions/scan).

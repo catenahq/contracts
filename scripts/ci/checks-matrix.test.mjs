@@ -214,6 +214,7 @@ refuses(ci("checks:\n  gates: {}\n"), "checks.gates: the name gates belongs to t
 refuses(ci("checks:\n  Python: {}\n"), "checks.Python: a check name is");
 refuses(ci("checks:\n  python:\n    timeout-minutes: 0\n"), "checks.python.timeout-minutes must be 1 to 360");
 refuses(ci("checks:\n  python:\n    go-cache: yes\n"), "checks.python.go-cache must be true or false");
+refuses(ci("checks:\n  python:\n    go-cache: true\n    tools: {uv: 0.13.9}\n"), "checks.python.go-cache needs tools.go");
 refuses(ci("checks:\n  python:\n    inputs: src/\n"), "checks.python.inputs must be a list of git pathspecs");
 refuses(ci("checks: [python]\n"), "checks must be a mapping of check names");
 refuses(ci("gates:\n  prose: false\n"), "gates: unknown key 'prose'");

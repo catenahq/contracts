@@ -177,12 +177,14 @@ function checkEntry(name, value, locked, secrets, runner, repo) {
   inputs(`${where}.inputs`, c.inputs);
   const sib = siblings(`${where}.siblings`, c.siblings, locked, secrets);
   const sibs = Object.keys(sib).filter((s) => sib[s] !== "");
+  const toolset = tools(`${where}.tools`, c.tools, { repo, sibs });
+  if (goCache && toolset.go === "") fail(`${where}.go-cache needs tools.go: the caches are Go's`);
   return {
     name,
     "runs-on": runsOn,
     timeout,
     "go-cache": goCache,
-    tools: tools(`${where}.tools`, c.tools, { repo, sibs }),
+    tools: toolset,
     sib,
     gates: { "core-app-names": [], duplication: false },
   };

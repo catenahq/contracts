@@ -276,6 +276,15 @@ check that names no `runs-on`. These jobs run:
   `ws/<repo>`. The entry `gates` runs the contracts gates of the locked
   contracts checkout instead: unicode, repo rules and whole-tree prose always,
   the core-app-name gate with its arguments, jscpd 4.3.0 with `duplication`.
+  An entry with `go-cache: true` restores the Go build and module caches
+  after setting up Go: key `go-<hash of go.sum>-<run id>-<run attempt>`,
+  restored by the prefixes `go-<hash>-` and `go-`, where the `go.sum` is the
+  one beside the go file (`ws/<repo>/go.sum`, or `ws/<sibling>/go.sum` for
+  `go: <sibling>/go.mod`, and `ws/<repo>/go.sum` for an exact version). A
+  build cache over 3 GiB is emptied before the check runs. Only a `schedule`
+  run saves the caches, after the check, whether it passed or not; a
+  `schedule` run never reuses a result, so the daily run runs every check and
+  refreshes the cache, and a pull request or push run only restores.
 - `scan`, when `scan-run` is `true` on any event but `schedule`, and
   `scan-daily`, when it is `true` on `schedule`, run scanctl (see "Scan").
 - `gate` is the status a branch rule requires. It runs unless the run is
@@ -298,7 +307,7 @@ checks:
     tools: {go: go.mod}      # node, uv: exact; go: go.mod, <sibling>/go.mod or exact; staticcheck: {version, sha256}
     siblings: {catena-ce: {fetch-depth: 0}, contracts: {}}   # or {token: CATENA_EE_READ_TOKEN}
     inputs: [.]              # git pathspecs the check reads
-    go-cache: true
+    go-cache: true           # restore the Go caches; the scheduled run saves them
 scan:                        # absent: no scan
   profile: full              # full (default) or sellable, passed to scanctl run --profile
   own-images: [catena-admin:ci]   # built by bash ci/run image; needs image-inputs
@@ -312,7 +321,8 @@ A sibling is one of `catena-admin`, `catena-ce`, `catena-templates`,
 needs the contracts line. A check sibling's `token` must name a secret `pr.yml`
 declares in `on.workflow_call.secrets`: `CATENA_EE_READ_TOKEN`. A scan sibling
 takes no `token`. A check's `go: <sibling>/go.mod` needs that sibling in the
-check's `siblings`. No check may be named `gates`.
+check's `siblings`. A check with `go-cache: true` needs `tools.go`. No check may
+be named `gates`.
 
 The parser prints one line of JSON: `include`, the matrix, and `scan`. Each
 entry carries every tool, sibling and gate key; a sibling's value is its fetch
