@@ -250,6 +250,7 @@ jobs:
       security-events: write
       pull-requests: write
       issues: write
+      statuses: write
     with: {runner: catena-ci}
 ```
 
@@ -279,7 +280,8 @@ check that names no `runs-on`. These jobs run:
 - `gate` is the status a branch rule requires. It runs unless the run is
   cancelled and fails on a draft pull request, on a `plan` that did not
   succeed, or on a `check`, `scan` or `scan-daily` result other than success
-  or skipped.
+  or skipped. On a pull request that passed, it then posts the commit status
+  `ci / gate` (see "Gate status").
 
 `.github/checks.yml` is data; the parser fails on any key it does not know and
 names it:
@@ -334,6 +336,41 @@ It needs `npm ci --prefix scripts/ci` once (npm `yaml`, locked in
 `scripts/ci/`, outside the package consumers link).
 `scripts/ci/checks-matrix.test.mjs` runs it over the checks of ci-runner,
 catena-admin and ops, their scan settings, and each key it refuses.
+
+### Gate status
+
+`ci / gate` is the required context. Two things report under that name: the
+check run of the job `gate` (called from the caller's job `ci`), and the commit
+status `scripts/ci/gate-status.mjs` posts from that job's last steps. A failed
+or cancelled need, or a draft, fails the check run and the status step never
+runs, so a failed result posts no success. When a check and a commit status have
+the same name, both must pass: a merge waits until the `ci / gate` check run and
+the `ci / gate` status are both success.
+
+    node gate-status.mjs --repo <owner/name> --pr <n> --sha <head sha> [--app-tests]
+
+`GH_TOKEN` authenticates `gh`. The script reads the pull request body for
+lines of exactly `Depends-on: catenahq/<repo>#<n>` and posts the whole state on
+every call, so the newest post is right:
+
+- `pending`, `waiting for catenahq/<repo>#<n>` for the first named pull request
+  that is open, or `catenahq/<repo>#<n> closed without merging` for one closed
+  unmerged (it can reopen); a pull request counts once its `merged_at` is set;
+- with `--app-tests`, `failure` when the newest `app-tests` status of the sha is
+  a failure or error, and `pending` (`waiting for app-tests`) when there is none
+  or it is pending;
+- `success`, `no open dependency`, otherwise.
+
+A line that starts with `Depends-on:` and does not match the pattern is ignored
+with a warning on stderr. A dependency in another repository is read with the
+same token. The description is cut at 140 characters, and `target_url` is the
+run's URL when `GITHUB_SERVER_URL`, `GITHUB_REPOSITORY` and `GITHUB_RUN_ID` are
+set. The script exits 1 on a GitHub API error, an unreadable dependency
+included, and 2 on bad arguments.
+
+The `gate` job runs it on `pull_request` only, with `contents: read`,
+`statuses: write` and `pull-requests: read`. `scripts/ci/gate-status.test.mjs`
+drives it with a `gh` stub on `PATH`.
 
 ### Scan
 

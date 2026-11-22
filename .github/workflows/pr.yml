@@ -296,11 +296,16 @@ jobs:
   gate:
     # The required status: a draft, a plan that did not succeed, or a check or
     # scan that ended other than success or skipped fails it. A reused result
-    # skips every check and scan and passes.
+    # skips every check and scan and passes. On a pull request it then posts
+    # the commit status of the same name, pending while a Depends-on pull
+    # request is open.
     needs: [plan, check, scan, scan-daily]
     if: ${{ !cancelled() }}
     runs-on: ${{ inputs.runner }}
-    permissions: {}
+    permissions:
+      contents: read
+      statuses: write # the commit status ci / gate
+      pull-requests: read # the pull request body and the pull requests it depends on
     steps:
       - name: Gate
         env:
@@ -329,3 +334,25 @@ jobs:
             esac
           done
           exit "$status"
+      # Reached only when the result above passed: a failed result never
+      # posts success.
+      - name: Check out the CI code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - if: github.event_name == 'pull_request'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.13.1"
+      - name: Post the commit status ci / gate
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: node .catena-ci/scripts/ci/gate-status.mjs --repo "$REPO" --pr "$PR" --sha "$SHA"

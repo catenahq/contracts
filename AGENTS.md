@@ -63,6 +63,7 @@ unless it is a release channel listed in `BRANCH_ALLOW`
 | `.github/actions/scanctl/` | Builds scanctl with `go build` at a commit, or from `ws/scanctl` in catenahq/scanctl. |
 | `.github/catenahq.lock` | The scanctl commit the scan builds, `catenahq/scanctl <sha> # main`. |
 | `scripts/ci/checks-matrix.mjs` | The parser `plan` runs: the matrix and the scan settings. A key it does not know fails, named. npm `yaml` is locked in `scripts/ci/package-lock.json`; a sibling or tool `pr.yml` gains is added to both, and a sibling to the scan action too. |
+| `scripts/ci/gate-status.mjs` | Computes and posts the commit status `ci / gate` of a pull request head: pending while a `Depends-on: catenahq/<repo>#<n>` pull request of its body is not merged, with `--app-tests` also while the `app-tests` status is not success (README.md, "Gate status"). The `gate` job of `pr.yml` runs it on a pull request. |
 | `scripts/sync-brand-assets.mjs` | Copies the logo into the consuming site's `public/favicon.svg`. Each site's `postinstall`. |
 | `scripts/lib/yaml-comments.mjs` | Reduces a YAML file to a comment skeleton so Vale can read it. Vale ships no YAML grammar. |
 | `scripts/lib/shell-comments.mjs` | The same for shell, suppressing heredocs and the shebang. |
