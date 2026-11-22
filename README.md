@@ -466,6 +466,7 @@ and a commit status have the same name, both must pass: a merge waits until the
 
     node gate-status.mjs --repo <owner/name> --pr <n> --sha <head sha>
                          [--app-tests | --apps-from <sha> --expect-apps <true|false>] [--gate-job]
+                         [--pend-unreadable]
 
 `GH_TOKEN` authenticates `gh`. The script reads the pull request body for
 lines of exactly `Depends-on: catenahq/<repo>#<n>`, and the newest `ci / gate`
@@ -500,8 +501,11 @@ is set, the read-only token of the repositories the pull request names (see
 characters, and `target_url` is the run's URL when `GITHUB_SERVER_URL`,
 `GITHUB_REPOSITORY` and `GITHUB_RUN_ID` are set. The script exits 1 on a GitHub
 API error, an unreadable dependency included, and 2 on bad arguments; with
-`--gate-job` a dependency it cannot read posts `pending` (`waiting for the
-control run`), never success or failure, and the control run posts the state.
+`--gate-job` or `--pend-unreadable` a dependency it cannot read posts `pending`
+(`waiting for the control run`), never success or failure, and the control run
+posts the state. `--pend-unreadable` still reads the check run; its caller is
+the app-tests verdict of catenahq/ops, run with `--app-tests` after it posts
+`app-tests`.
 
 The `gate` job runs it on a pull request of this repository with
 `--gate-job`, and with `--app-tests` when the plan's `apps.enabled` is true,

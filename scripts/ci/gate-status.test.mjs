@@ -183,6 +183,18 @@ try {
     "pending",
     "waiting for the control run",
   );
+  // The app-tests verdict of ops: an unreadable dependency is pending for the
+  // control run, and the check run is still read.
+  const verdict = (extra, opts = {}) =>
+    exec({ ...privateDep, ...extra, [STATUS]: { statuses: [status("app-tests", "success")] } }, { ...readOnly, args: ["--app-tests", "--pend-unreadable"], ...opts });
+  expectPost("verdict, unreadable dependency", verdict({}), "pending", "waiting for the control run");
+  expectPost("verdict, readable dependency", verdict({}, { env: { GH_READ_TOKEN: "read" } }), "success", "no open dependency, app-tests passed");
+  expectPost("verdict, no gate check run", verdict(gateRuns(),{ env: { GH_READ_TOKEN: "read" } }), "pending", "waiting for checks");
+  expectPost("verdict, failed gate check run", verdict(gateRuns(run({ conclusion: "failure" }))), "failure", "ci / gate check run failure");
+  assert.equal(verdict({}, { fail: ["check-runs"] }).status, 1, "the verdict reads the check run");
+  const withoutFlag = exec({ ...privateDep, [STATUS]: { statuses: [status("app-tests", "success")] } }, { ...readOnly, args: ["--app-tests"] });
+  assert.equal(withoutFlag.status, 1, "without --pend-unreadable an unreadable dependency is an error");
+  assert.equal(withoutFlag.posts.length, 0);
 
   // --apps-from: app-tests when checks.yml at the commit declares apps, which
   // --expect-apps must agree with; a 404 is no checks.yml.

@@ -2,13 +2,16 @@
 //
 //   node gate-status.mjs --repo <owner/name> --pr <n> --sha <head sha>
 //                        [--app-tests | --apps-from <sha> --expect-apps <true|false>] [--gate-job]
+//                        [--pend-unreadable]
 //
 // GH_TOKEN authenticates gh, and GH_READ_TOKEN, when set, reads the
 // dependencies. The status is success only once the `ci / gate` check run
 // GitHub Actions made on the sha completed with success; --gate-job skips that
 // read, for the gate job itself, the run being judged, and posts pending
-// "waiting for the control run" for a dependency it cannot read. The pull
-// request body names its dependencies, one per line, as
+// "waiting for the control run" for a dependency it cannot read.
+// --pend-unreadable posts that pending too and still reads the check run, for
+// the app-tests verdict of ops, whose token may not read a dependency's
+// repository. The pull request body names its dependencies, one per line, as
 // `Depends-on: catenahq/<repo>#<n>`; the status is pending until each named
 // pull request is merged. With --app-tests the newest `app-tests` status of the
 // sha must also be success; --apps-from asks for it when the repository's
@@ -125,14 +128,14 @@ export function repoDeclaresApps(repo, ref) {
   }
 }
 
-export function computeState({ repo, pr, sha, appTests, gateJob = false }, warn = () => {}) {
+export function computeState({ repo, pr, sha, appTests, gateJob = false, pendUnreadable = false }, warn = () => {}) {
   const { deps, malformed } = parseDependsOn(get(`repos/${repo}/pulls/${pr}`).body);
   for (const line of malformed) warn(`ignoring malformed line '${line}': write Depends-on: catenahq/<repo>#<number>`);
   const tests = appTests ? appTestsState(repo, sha) : null;
   if (tests === "failure" || tests === "error") return { state: "failure", description: "app-tests failed" };
   const checks = gateJob ? null : checksState(repo, sha);
   if (checks?.state === "failure") return checks;
-  const waiting = unmetDependency(deps, gateJob ? "waiting for the control run" : null);
+  const waiting = unmetDependency(deps, gateJob || pendUnreadable ? "waiting for the control run" : null);
   if (waiting) return { state: "pending", description: waiting };
   if (checks) return checks;
   if (!appTests) return { state: "success", description: "no open dependency" };
@@ -154,12 +157,13 @@ export function post({ repo, sha }, { state, description, context = CONTEXT }, e
 }
 
 function parseArgs(argv) {
-  const opts = { appTests: false, gateJob: false };
+  const opts = { appTests: false, gateJob: false, pendUnreadable: false };
   const values = { "--repo": "repo", "--pr": "pr", "--sha": "sha", "--apps-from": "appsFrom", "--expect-apps": "expectApps" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--app-tests") opts.appTests = true;
     else if (a === "--gate-job") opts.gateJob = true;
+    else if (a === "--pend-unreadable") opts.pendUnreadable = true;
     else if (Object.hasOwn(values, a)) opts[values[a]] = argv[++i];
     else throw new Error(`unknown argument '${a}'`);
   }

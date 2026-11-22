@@ -33,19 +33,6 @@
       "security-events": "write",
       "statuses": "write"
     },
-    "catena-admin:ci.yml:duplication": {
-      "contents": "read"
-    },
-    "catena-admin:ci.yml:go": {
-      "contents": "read"
-    },
-    "catena-admin:ci.yml:prose": {
-      "contents": "read"
-    },
-    "catena-admin:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
     "catena-admin:engine-bump.yml:bump": {
       "contents": "read"
     },
@@ -65,15 +52,6 @@
       "id-token": "write",
       "packages": "write"
     },
-    "catena-admin:security.yml:image": {
-      "pull-requests": "read"
-    },
-    "catena-admin:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
-    },
     "catena-ce:ci-control.yml:control": {
       "actions": "read",
       "checks": "read",
@@ -89,108 +67,15 @@
       "security-events": "write",
       "statuses": "write"
     },
-    "catena-ce:ci.yml:duplication": {
-      "contents": "read"
-    },
-    "catena-ce:ci.yml:entry-points": {
-      "contents": "read"
-    },
-    "catena-ce:ci.yml:installer": {
-      "contents": "read"
-    },
-    "catena-ce:ci.yml:keycloak-provider": {
-      "contents": "read"
-    },
-    "catena-ce:ci.yml:prose": {
-      "contents": "read"
-    },
-    "catena-ce:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "catena-ce:ci.yml:sentences": {
-      "contents": "read"
-    },
-    "catena-ce:ci.yml:syntax": {
-      "contents": "read"
-    },
     "catena-ce:issue-triage-gate.yml:triage": {
       "contents": "read",
       "issues": "write"
     },
     "catena-ce:publish-installer.yml:publish": {
-      "actions": "read",
       "contents": "read",
       "id-token": "write"
     },
-    "catena-ce:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
-    },
     "catena-templates:adopt-fork.yml:adopt": {
-      "contents": "read"
-    },
-    "catena-templates:app-ci.yml:app": {
-      "contents": "read",
-      "statuses": "read"
-    },
-    "catena-templates:app-ci.yml:app-checks": {
-      "contents": "read"
-    },
-    "catena-templates:app-ci.yml:plan": {
-      "contents": "read"
-    },
-    "catena-templates:app-ci.yml:repo": {
-      "contents": "read"
-    },
-    "catena-templates:app-ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "catena-templates:app-ci.yml:scope": {
-      "contents": "read"
-    },
-    "catena-templates:app-dispatch.yml:dispatch": {
-      "contents": "read"
-    },
-    "catena-templates:app-main.yml:checks": {
-      "actions": "read",
-      "contents": "read",
-      "statuses": "read"
-    },
-    "catena-templates:app-main.yml:dispatch": {
-      "contents": "read"
-    },
-    "catena-templates:app-main.yml:list": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "catena-templates:app-main.yml:verdict": {
-      "actions": "read",
-      "statuses": "write"
-    },
-    "catena-templates:app-tag.yml:tag": {
-      "contents": "read"
-    },
-    "catena-templates:build-and-verify.yml:duplication": {
-      "contents": "read"
-    },
-    "catena-templates:build-and-verify.yml:lint-quiesce-tests": {
-      "contents": "read"
-    },
-    "catena-templates:build-and-verify.yml:render-idempotency": {
-      "contents": "read"
-    },
-    "catena-templates:build-and-verify.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "catena-templates:build-and-verify.yml:schema": {
-      "contents": "read"
-    },
-    "catena-templates:build-and-verify.yml:unicode-hygiene": {
       "contents": "read"
     },
     "catena-templates:ci-control.yml:control": {
@@ -216,12 +101,6 @@
       "contents": "read",
       "issues": "write"
     },
-    "catena-templates:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
-    },
     "ci-runner:ci-control.yml:control": {
       "actions": "read",
       "checks": "read",
@@ -236,12 +115,6 @@
       "pull-requests": "write",
       "security-events": "write",
       "statuses": "write"
-    },
-    "ci-runner:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
     },
     "contracts:ci-control.yml:control": {
       "actions": "read",
@@ -344,18 +217,7 @@
       "security-events": "write",
       "statuses": "write"
     },
-    "docs:ci.yml:docs": {
-      "contents": "read"
-    },
-    "docs:ci.yml:duplication": {
-      "contents": "read"
-    },
-    "docs:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
     "docs:deploy-pages.yml:build": {
-      "actions": "read",
       "contents": "read"
     },
     "docs:deploy-pages.yml:deploy": {
@@ -365,27 +227,6 @@
     "docs:issue-triage-gate.yml:triage": {
       "contents": "read",
       "issues": "write"
-    },
-    "docs:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
-    },
-    "ops-templates:app-ci.yml:app-ci": {
-      "actions": "read",
-      "contents": "read",
-      "statuses": "read"
-    },
-    "ops-templates:app-dispatch.yml:app-dispatch": {
-      "contents": "read"
-    },
-    "ops-templates:app-tag.yml:app-tag": {
-      "contents": "read"
-    },
-    "ops-templates:build-and-verify.yml:build-and-verify": {
-      "actions": "read",
-      "contents": "read"
     },
     "ops-templates:ci-control.yml:control": {
       "actions": "read",
@@ -401,12 +242,6 @@
       "pull-requests": "write",
       "security-events": "write",
       "statuses": "write"
-    },
-    "ops-templates:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
     },
     "ops:app-canary.yml:canary": {
       "contents": "read"
@@ -437,22 +272,12 @@
     "ops:appci-seats.yml:release": {
       "contents": "read"
     },
-    "ops:catalog-smoke.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "ops:catalog-smoke.yml:static-parity": {
-      "contents": "read"
-    },
     "ops:ci-control.yml:control": {
       "actions": "read",
       "checks": "read",
       "contents": "read",
       "pull-requests": "read",
       "statuses": "write"
-    },
-    "ops:ci.yml:audit": {
-      "contents": "read"
     },
     "ops:ci.yml:ci": {
       "actions": "read",
@@ -461,28 +286,6 @@
       "pull-requests": "write",
       "security-events": "write",
       "statuses": "write"
-    },
-    "ops:ci.yml:duplication": {
-      "contents": "read"
-    },
-    "ops:ci.yml:prose": {
-      "contents": "read"
-    },
-    "ops:ci.yml:python": {
-      "contents": "read"
-    },
-    "ops:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "ops:ci.yml:unicode": {
-      "contents": "read"
-    },
-    "ops:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
     },
     "ops:version-drift.yml:ce-pin-drift": {
       "contents": "read"
@@ -502,16 +305,6 @@
       "security-events": "write",
       "statuses": "write"
     },
-    "renovate-config:ci.yml:repo-rules": {
-      "contents": "read"
-    },
-    "renovate-config:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "renovate-config:ci.yml:validate-presets": {
-      "contents": "read"
-    },
     "renovate:ci-control.yml:control": {
       "actions": "read",
       "checks": "read",
@@ -526,19 +319,6 @@
       "pull-requests": "write",
       "security-events": "write",
       "statuses": "write"
-    },
-    "renovate:ci.yml:repo-rules": {
-      "contents": "read"
-    },
-    "renovate:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "renovate:recheck-renovate-prs.yml:recheck": {
-      "contents": "read"
-    },
-    "renovate:renovate.yml:renovate": {
-      "contents": "read"
     },
     "repertoire-entreprises:ci-control.yml:control": {
       "actions": "read",
@@ -555,16 +335,6 @@
       "security-events": "write",
       "statuses": "write"
     },
-    "repertoire-entreprises:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "repertoire-entreprises:ci.yml:web": {
-      "contents": "read"
-    },
-    "repertoire-entreprises:ci.yml:worker": {
-      "contents": "read"
-    },
     "repertoire-entreprises:images.yml:build": {
       "contents": "read",
       "packages": "write"
@@ -573,12 +343,6 @@
       "contents": "write",
       "id-token": "write",
       "packages": "write"
-    },
-    "repertoire-entreprises:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
     },
     "scanctl:ci-control.yml:control": {
       "actions": "read",
@@ -594,20 +358,6 @@
       "pull-requests": "write",
       "security-events": "write",
       "statuses": "write"
-    },
-    "scanctl:ci.yml:repo-rules": {
-      "contents": "read"
-    },
-    "scanctl:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "scanctl:ci.yml:self-scan": {
-      "contents": "read",
-      "security-events": "write"
-    },
-    "scanctl:ci.yml:test": {
-      "contents": "read"
     },
     "scanctl:github-reusable.yml:same-tree": {
       "actions": "read",
@@ -644,36 +394,19 @@
       "security-events": "write",
       "statuses": "write"
     },
-    "website:ci.yml:duplication": {
-      "contents": "read"
-    },
-    "website:ci.yml:same-tree": {
-      "actions": "read",
-      "contents": "read"
-    },
-    "website:ci.yml:website": {
-      "contents": "read"
-    },
     "website:deploy-pages.yml:build": {
-      "actions": "read",
       "contents": "read"
     },
     "website:deploy-pages.yml:deploy": {
       "id-token": "write",
       "pages": "write"
     },
-    "website:deploy-pages.yml:start-on-main": {
+    "website:deploy-pages.yml:start-on-release": {
       "actions": "write"
     },
     "website:issue-triage-gate.yml:triage": {
       "contents": "read",
       "issues": "write"
-    },
-    "website:security.yml:scanctl": {
-      "actions": "read",
-      "contents": "read",
-      "pull-requests": "write",
-      "security-events": "write"
     }
   }
 }
