@@ -237,6 +237,13 @@ try {
   const appSpec = specOf({ entry: { ...PYTHON, name: "app-web", kind: "app" } });
   assert.notEqual(at(appSpec, "2026-11-21"), at(appSpec, "2026-11-22"));
   assert.ok(keyText({ spec: appSpec, tree: "t", sibs: [], workflowSha: W, date: "2026-11-22" }).endsWith("date=2026-11-22\n"));
+  // The provenance check of an app entry asks a year of age on a pull request
+  // from a fork: that setting is another key; a check's key has no such line.
+  const aged = (spec, age) => keyText({ spec, tree: "t", sibs: [], workflowSha: W, date: "2026-11-22", age });
+  assert.ok(aged(appSpec, false).includes("provenance-age=false\n") && aged(appSpec, true).includes("provenance-age=true\n"));
+  assert.ok(!aged(specOf({ entry: PYTHON }), true).includes("provenance-age"));
+  const APP = { ...PYTHON, name: "app-web", kind: "app" };
+  assert.notEqual(recordOf(APP).name, recordOf(APP, { PROVENANCE_CHECK_AGE: "true" }).name, "the record reads PROVENANCE_CHECK_AGE");
 
   // The base moved on docs/ only: python keeps its key and records; docs
   // differs from the pull request head and records nothing, except on a

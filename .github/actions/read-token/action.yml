@@ -1,0 +1,59 @@
+name: read-token
+description: >-
+  Mint a read-only token of a GitHub App (contents and pull requests read) for
+  the caller's repository and every catenahq repository its pull request
+  names: the lock files at the base and head commits and the Depends-on lines
+  of the body; with no pull request, the Depends-on lines of every open pull
+  request. scripts/ci/read-scope.mjs computes the list and fails on more than
+  15; it runs from .catena-ci, which holds the CI code and its npm packages.
+
+inputs:
+  client-id:
+    description: The App's client id.
+    required: true
+  private-key:
+    description: The App's private key.
+    required: true
+  pull-request:
+    description: The pull request number. Empty, every open pull request.
+    default: ''
+  base:
+    description: The pull request's base commit (40 hex digits).
+    default: ''
+  head:
+    description: The pull request's head commit (40 hex digits).
+    default: ''
+
+outputs:
+  token:
+    description: The read-only token.
+    value: ${{ steps.token.outputs.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: The repositories to read
+      id: scope
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ inputs.pull-request }}
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+      run: |
+        if [ -n "$PR" ]; then
+          node .catena-ci/scripts/ci/read-scope.mjs --repo "$REPO" --pr "$PR" --base "$BASE" --head "$HEAD"
+        else
+          node .catena-ci/scripts/ci/read-scope.mjs --repo "$REPO" --open
+        fi
+    - name: Mint the read-only token
+      id: token
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+      with:
+        client-id: ${{ inputs.client-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ steps.scope.outputs.repositories }}
+        permission-contents: read
+        permission-pull-requests: read

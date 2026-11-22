@@ -80,11 +80,13 @@ export function specOf({ entry, scan }) {
 export const siblingsOf = (spec) =>
   Object.keys(spec.entry.sib ?? {}).filter((s) => spec.entry.sib[s] !== "").sort();
 
-// The key text: one line per fact the result depends on.
-export function keyText({ spec, tree, sibs, workflowSha, date }) {
+// The key text: one line per fact the result depends on. An app entry's
+// provenance check asks a year of age when age is true (PROVENANCE_CHECK_AGE).
+export function keyText({ spec, tree, sibs, workflowSha, date, age = false }) {
   const lines = [`entry=${JSON.stringify(sortKeys(spec.entry))}`, `tree=${tree}`];
   for (const [repo, sha] of sibs) lines.push(`sib:${repo}=${sha}`);
   lines.push(`workflow=${workflowSha}`);
+  if (spec.entry.kind === "app") lines.push(`provenance-age=${age}`);
   if (spec.dated) lines.push(`date=${date}`);
   return lines.map((l) => `${l}\n`).join("");
 }
@@ -92,6 +94,8 @@ export function keyText({ spec, tree, sibs, workflowSha, date }) {
 export const recordName = (name, key) => `ci-check.${name}.${createHash("sha256").update(key).digest("hex").slice(0, 40)}`;
 
 export const utcDate = (now = new Date()) => now.toISOString().slice(0, 10);
+
+const provenanceAge = (env) => env.PROVENANCE_CHECK_AGE === "true";
 
 // The checkout of the caller: trees of its commits, limited to a spec's paths.
 class Checkout {
@@ -244,7 +248,7 @@ export function plan({ matrix, repo }, env = process.env, cwd = process.cwd()) {
     for (const spec of specs) {
       const tree = ctx.checkout.tree("HEAD", spec);
       const sibs = siblingsOf(spec).map((s) => [s, sibling(s)]);
-      const name = recordName(spec.name, keyText({ spec, tree, sibs, workflowSha: ctx.workflowSha, date }));
+      const name = recordName(spec.name, keyText({ spec, tree, sibs, workflowSha: ctx.workflowSha, date, age: provenanceAge(env) }));
       const url = findSource(ctx, spec, name, tree);
       if (url === null) {
         console.log(`${spec.name}: no record (${name})`);
@@ -277,7 +281,7 @@ export function record(args, env = process.env, cwd = process.cwd()) {
   const checkout = new Checkout(cwd);
   const tree = checkout.tree("HEAD", spec);
   const sibs = siblingsOf(spec).map((s) => [s, exec("git", ["-C", join(cwd, "..", s), "rev-parse", "HEAD"]).trim()]);
-  const key = keyText({ spec, tree, sibs, workflowSha: sha, date: utcDate() });
+  const key = keyText({ spec, tree, sibs, workflowSha: sha, date: utcDate(), age: provenanceAge(env) });
   const name = recordName(spec.name, key);
   const keep = env.GITHUB_EVENT_NAME !== "pull_request" || checkout.tree("HEAD^2", spec) === tree;
   const dir = mkdtempSync(join(env.RUNNER_TEMP || tmpdir(), "ci-check-"));

@@ -31,6 +31,11 @@ on:
 
 permissions: {}
 
+env:
+  # The app checks ask a year of age of a pull request from a fork only; the
+  # value joins an app entry's reuse key.
+  PROVENANCE_CHECK_AGE: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
 jobs:
   plan:
     runs-on: ${{ inputs.runner }}
@@ -457,8 +462,6 @@ jobs:
           OWN_IMAGES: ${{ fromJSON(needs.plan.outputs.apps).own-images }}
           OWNER: ${{ github.repository_owner }}
           GITHUB_TOKEN: ${{ github.token }}
-          # The year of age is asked of a pull request from a fork only.
-          PROVENANCE_CHECK_AGE: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-check.sh" app "${CHECK#app-}"
       # Reached only when the check passed. A failed upload loses only the
       # record: a later run of the same key runs the check again.
@@ -590,7 +593,9 @@ jobs:
     # leaves the matrix, and with none left check is skipped and passes, as
     # does a reused scan. On a pull request it then posts
     # the commit status of the same name, pending while a Depends-on pull
-    # request is open.
+    # request is open and, with apps, until app-tests passed. A pull request
+    # from a fork holds a read-only token: the control workflow posts its
+    # status.
     needs: [plan, check, scan, scan-daily]
     if: ${{ !cancelled() }}
     runs-on: ${{ inputs.runner }}
@@ -598,6 +603,8 @@ jobs:
       contents: read
       statuses: write # the commit status ci / gate
       pull-requests: read # the pull request body and the pull requests it depends on
+    env:
+      POST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - name: Gate
         env:
@@ -628,23 +635,37 @@ jobs:
           exit "$status"
       # Reached only when the result above passed: a failed result never
       # posts success.
+      - name: A pull request from a fork
+        if: github.event_name == 'pull_request' && env.POST != 'true'
+        run: echo "::notice::a pull request from a fork gets no commit status from this job; ci-control posts ci / gate"
       - name: Check out the CI code
-        if: github.event_name == 'pull_request'
+        if: env.POST == 'true'
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .catena-ci
           persist-credentials: false
-      - if: github.event_name == 'pull_request'
+      - if: env.POST == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "26.13.1"
+      - name: Install the YAML parser
+        if: env.POST == 'true'
+        run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      # This job is the ci / gate check run being judged: --gate-job, which
+      # also posts pending for a Depends-on pull request its token cannot
+      # read; the control run posts the real state. With apps in checks.yml
+      # (the plan's parse) it waits for app-tests too.
       - name: Post the commit status ci / gate
-        if: github.event_name == 'pull_request'
+        if: env.POST == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
-        run: node .catena-ci/scripts/ci/gate-status.mjs --repo "$REPO" --pr "$PR" --sha "$SHA"
+          APPS: ${{ fromJSON(needs.plan.outputs.apps).enabled }}
+        run: |
+          args=(--repo "$REPO" --pr "$PR" --sha "$SHA" --gate-job)
+          if [ "$APPS" = true ]; then args+=(--app-tests); fi
+          node .catena-ci/scripts/ci/gate-status.mjs "${args[@]}"

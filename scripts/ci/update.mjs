@@ -1,30 +1,29 @@
 // Brings the auto-merge pull requests of a repository up to date with their
 // base one at a time, and recomputes the `ci / gate` status of the pull
-// requests that depend on one.
+// requests whose checks ended, and hourly of every open one.
 //
-//   node update.mjs --repo <owner/name> --event <name> [--sha <pushed commit>] [--apps]
+//   node update.mjs --repo <owner/name> --event <name> [--sha <run head>] [--apps]
 //
-// GH_TOKEN authenticates gh. On every event, for each base of BASES: when a
+// GH_TOKEN, a token of this repository alone, authenticates gh. On every
+// event, for each base of BASES: when a
 // candidate (an open pull request with auto-merge on) that is not behind its
 // base has its `ci / gate` check run queued or in progress, nothing is
 // updated; otherwise the oldest candidate that is behind its base, whose head
 // passed the `ci / gate` check run, with --apps whose `app-tests` status is
-// success, and with no open Depends-on pull request, is updated with its base.
-// On push, each open pull request of the owner whose body names a pull request
-// merged as --sha gets its `ci / gate` status recomputed, with app-tests for
-// this repository with --apps and for another one whose .github/checks.yml at
-// the pull request head declares apps; on schedule, each open pull request of
-// the repository with a Depends-on line does. Exit 1 on a GitHub API error, 2
-// on bad arguments (README.md, "Control workflow").
+// success, and with no open Depends-on pull request, is updated with its base;
+// a failed update is reported and the next candidate is tried. On
+// workflow_run without --apps, --sha is the run's head, and each open pull
+// request of the repository with that head gets its `ci / gate` status
+// recomputed; on schedule, each open pull request of the repository does, so
+// a merged dependency reaches its dependents within the hour. Exit 1 on a
+// GitHub API error or a failed update, 2 on bad arguments (README.md,
+// "Control workflow").
+import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parse } from "yaml";
-import { ApiError, CONTEXT, appTestsState, computeState, get, gh, parseDependsOn, post, unmetDependency } from "./gate-status.mjs";
+import { ApiError, CONTEXT, appTestsState, computeState, gateRun, gh, parseDependsOn, post, unmetDependency } from "./gate-status.mjs";
 
 export const BASES = ["main", "release"];
 const EVENTS = ["push", "workflow_run", "schedule", "pull_request_target"];
-// Any App with checks write can create a check run of any name: only the one
-// GitHub Actions made for the gate job counts.
-const ACTIONS_APP = "github-actions";
 const PR_FIELDS = "number,isDraft,autoMergeRequest,headRefOid,mergeStateStatus,createdAt,body";
 
 const ghJSON = (args) => JSON.parse(gh(args));
@@ -33,16 +32,6 @@ function openPulls(repo, base) {
   const args = ["pr", "list", "--repo", repo, "--state", "open", "--json", PR_FIELDS, "--limit", "1000"];
   if (base) args.push("--base", base);
   return ghJSON(args);
-}
-
-// The newest `ci / gate` check run GitHub Actions made on the commit, or null.
-function gateRun(repo, sha) {
-  const { check_runs: runs } = get(`repos/${repo}/commits/${sha}/check-runs?check_name=${encodeURIComponent(CONTEXT)}&per_page=100`);
-  return (
-    runs
-      .filter((r) => r.name === CONTEXT && r.app?.slug === ACTIONS_APP)
-      .sort((a, b) => (b.started_at ?? "").localeCompare(a.started_at ?? ""))[0] ?? null
-  );
 }
 
 // Why a candidate is not updated, or null when it is the one to update.
@@ -62,8 +51,9 @@ function skipReason(repo, pr, apps) {
 }
 
 // Updates the oldest ready candidate of the base with its base; its number,
-// or null when none is updated.
-export function updateBase(repo, base, apps, log) {
+// or null when none is updated. A candidate whose update fails goes to fail
+// and the next one is tried.
+export function updateBase(repo, base, apps, log, fail) {
   const candidates = openPulls(repo, base)
     .filter((pr) => pr.autoMergeRequest)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -83,28 +73,18 @@ export function updateBase(repo, base, apps, log) {
       log(`${base}: skip #${pr.number}: ${reason}`);
       continue;
     }
-    gh(["api", "-X", "PUT", `repos/${repo}/pulls/${pr.number}/update-branch`, "-f", `expected_head_sha=${pr.headRefOid}`]);
+    try {
+      gh(["api", "-X", "PUT", `repos/${repo}/pulls/${pr.number}/update-branch`, "-f", `expected_head_sha=${pr.headRefOid}`]);
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      fail(`${base}: #${pr.number} not updated: ${e.message}`);
+      continue;
+    }
     log(`${base}: updated #${pr.number} with its base`);
     return pr.number;
   }
   log(`${base}: no pull request to update`);
   return null;
-}
-
-// Whether the repository runs app-tests at the commit: its .github/checks.yml,
-// read as data, declares apps. A 404 is no checks.yml, so no app-tests; any
-// other failed read fails.
-function declaresApps(repo, sha) {
-  let file;
-  try {
-    file = get(`repos/${repo}/contents/.github/checks.yml?ref=${sha}`);
-  } catch (e) {
-    if (e instanceof ApiError && e.message.includes("(HTTP 404)")) return false;
-    throw e;
-  }
-  if (file.encoding !== "base64") throw new ApiError(`${repo} .github/checks.yml at ${sha}: encoding '${file.encoding}', not base64`);
-  const doc = parse(Buffer.from(file.content, "base64").toString("utf-8"));
-  return doc !== null && typeof doc === "object" && Object.hasOwn(doc, "apps");
 }
 
 function refresh(repo, number, sha, appTests, warn, log) {
@@ -113,36 +93,21 @@ function refresh(repo, number, sha, appTests, warn, log) {
   log(`${repo}#${number}: ${CONTEXT} ${result.state}: ${result.description}`);
 }
 
-// The open pull requests of the owner whose body names a pull request merged
-// as sha. Search matches words, so each hit's body is read and parsed again.
-export function refreshDependents(repo, sha, apps, warn, log) {
-  const owner = repo.split("/")[0];
-  const merged = get(`repos/${repo}/commits/${sha}/pulls`).filter((pr) => pr.merged_at && pr.merge_commit_sha === sha);
-  for (const { number } of merged) {
-    const line = `Depends-on: ${repo}#${number}`;
-    const hits = ghJSON(["search", "prs", "--owner", owner, "--state", "open", "--match", "body", "--json", "number,repository", "--limit", "100", line]);
-    for (const hit of hits) {
-      const target = hit.repository.nameWithOwner;
-      const pr = get(`repos/${target}/pulls/${hit.number}`);
-      if (!parseDependsOn(pr.body).deps.some((d) => d.repo === repo && d.number === number)) continue;
-      const appTests = target === repo ? apps : declaresApps(target, pr.head.sha);
-      refresh(target, hit.number, pr.head.sha, appTests, warn, log);
-    }
-  }
-}
-
-// Every open pull request of the repository with a Depends-on line: covers a
-// dependent the search did not index yet when its dependency merged.
-export function refreshDependsOn(repo, apps, warn, log) {
+// The open pull requests of the repository, all or those whose head is sha.
+// All on schedule: a dependency merged since the last run, and a head whose
+// run's recompute a newer updater run replaced.
+export function refreshOpen(repo, sha, apps, warn, log) {
   for (const pr of openPulls(repo)) {
-    if (parseDependsOn(pr.body).deps.length) refresh(repo, pr.number, pr.headRefOid, apps, warn, log);
+    if (sha === null || pr.headRefOid === sha) refresh(repo, pr.number, pr.headRefOid, apps, warn, log);
   }
 }
 
-export function run({ repo, event, sha, apps }, warn, log) {
-  for (const base of BASES) updateBase(repo, base, apps, log);
-  if (event === "push") refreshDependents(repo, sha, apps, warn, log);
-  if (event === "schedule") refreshDependsOn(repo, apps, warn, log);
+export function run({ repo, event, sha, apps }, warn, log, fail) {
+  for (const base of BASES) updateBase(repo, base, apps, log, fail);
+  // The status once the checks ended, for a pull request whose gate job posts
+  // none (from a fork). With apps, dispatch posts it after the same run.
+  if (event === "workflow_run" && !apps) refreshOpen(repo, sha, apps, warn, log);
+  if (event === "schedule") refreshOpen(repo, null, apps, warn, log);
 }
 
 function parseArgs(argv) {
@@ -155,7 +120,9 @@ function parseArgs(argv) {
   }
   if (!/^[\w.-]+\/[\w.-]+$/.test(opts.repo ?? "")) throw new Error("--repo needs owner/name");
   if (!EVENTS.includes(opts.event)) throw new Error(`--event needs one of ${EVENTS.join(", ")}`);
-  if (opts.event === "push" && !/^[0-9a-f]{40}$/.test(opts.sha ?? "")) throw new Error("--sha needs the pushed 40-hex commit on push");
+  if (opts.event === "workflow_run" && !/^[0-9a-f]{40}$/.test(opts.sha ?? "")) {
+    throw new Error("--sha needs the 40-hex head of the workflow run");
+  }
   return opts;
 }
 
@@ -167,13 +134,20 @@ function main() {
     console.error(`::error::update: ${e.message}`);
     process.exit(2);
   }
+  let failed = 0;
+  const fail = (m) => {
+    failed++;
+    console.error(`::error::update: ${m}`);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `- update failed: ${m}\n`);
+  };
   try {
-    run(opts, (m) => console.error(`::warning::update: ${m}`), (m) => console.log(m));
+    run(opts, (m) => console.error(`::warning::update: ${m}`), (m) => console.log(m), fail);
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
     console.error(`::error::update: ${e.message}`);
     process.exit(1);
   }
+  if (failed) process.exit(1);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();

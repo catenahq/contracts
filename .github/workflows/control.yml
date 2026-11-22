@@ -5,10 +5,14 @@ name: control
 # (README.md, "Control workflow").
 #
 # depends posts the commit status ci / gate of a pull request on each of its
-# pull_request_target events, so an edited Depends-on line counts at once.
-# update brings the oldest ready auto-merge pull request of each base up to
-# date with it, one at a time, and on a push recomputes the status of the open
-# pull requests that depend on the one merged. With apps, dispatch sends the
+# pull_request_target events, so an edited Depends-on line counts at once; it
+# is success only once the ci / gate check run passed. update brings the
+# oldest ready auto-merge pull request of each base up to date with it, one at
+# a time, and recomputes the status of the pull requests with the head a ci
+# run judged, and hourly of every open one. Every App token that writes is
+# scoped to this repository, or to ops for dispatch; the reads of other
+# repositories take a read-only token of the repositories the pull requests
+# name (.github/actions/read-token). With apps, dispatch sends the
 # app a pull request changes to the app tests after its ci run, and tag tags
 # the apps of a merged pull request on the push of its merge. With release,
 # release runs the release step a dispatch on main names. policy judges the
@@ -48,10 +52,17 @@ jobs:
   depends:
     if: github.event_name == 'pull_request_target'
     runs-on: ${{ inputs.runner }}
+    # The CI App's client id and private key, for the read-only token of the
+    # repositories the pull request names, are secrets of the caller's
+    # environment ci.
+    environment:
+      name: ci
+      deployment: false
     permissions:
-      contents: read # the CI code
+      contents: read # the CI code, the lock files and the base's .github/checks.yml
       statuses: write # the commit status ci / gate
-      pull-requests: read # the pull request body and the pull requests it depends on
+      pull-requests: read # the pull request body
+      checks: read # the ci / gate check run of the head
     steps:
       - name: Check out the CI code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -63,17 +74,31 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "26.13.1"
+      - name: Install the YAML parser
+        run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      - name: Mint a read-only token of the repositories the pull request names
+        id: read-token
+        uses: ./.catena-ci/.github/actions/read-token
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          pull-request: ${{ github.event.pull_request.number }}
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+      # app-tests is waited for when the base's .github/checks.yml declares
+      # apps, read as data; the input apps must agree.
       - name: Post the commit status ci / gate
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_READ_TOKEN: ${{ steps.read-token.outputs.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          BASE: ${{ github.event.pull_request.base.sha }}
           APPS: ${{ inputs.apps }}
-        run: |
-          args=(--repo "$REPO" --pr "$PR" --sha "$SHA")
-          if [ "$APPS" = true ]; then args+=(--app-tests); fi
-          node .catena-ci/scripts/ci/gate-status.mjs "${args[@]}"
+        run: >-
+          node .catena-ci/scripts/ci/gate-status.mjs --repo "$REPO" --pr "$PR" --sha "$SHA"
+          --apps-from "$BASE" --expect-apps "$APPS"
 
   update:
     if: >-
@@ -92,21 +117,24 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read # the CI code
+      pull-requests: read # the open pull requests' Depends-on lines
     steps:
       - name: Mint a CI App token
-        # Every repository the App is installed on: a dependent pull request
-        # can be in any of them. update-branch needs contents write on the
-        # head repository.
+        # This repository alone. update-branch needs contents write, and the
+        # workflows permission when the base's history it merges holds
+        # workflow changes.
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-pull-requests: write
           permission-statuses: write
           permission-checks: read
+          permission-workflows: write
       - name: Check out the CI code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -119,12 +147,20 @@ jobs:
           node-version: "26.13.1"
       - name: Install the YAML parser
         run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      - name: Mint a read-only token of the repositories the open pull requests name
+        id: read-token
+        uses: ./.catena-ci/.github/actions/read-token
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
       - name: Update the next pull request
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_READ_TOKEN: ${{ steps.read-token.outputs.token }}
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
-          SHA: ${{ github.sha }}
+          # The pushed commit, or the head the ci run judged.
+          SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           APPS: ${{ inputs.apps }}
         run: |
           args=(--repo "$REPO" --event "$EVENT" --sha "$SHA")
@@ -151,6 +187,7 @@ jobs:
       contents: read # the CI code, the tools and the pull request head
       statuses: write # app-tests when no app changed, and ci / gate
       pull-requests: read # the pull request, its commits and the pull requests it depends on
+      checks: read # the ci / gate check run of the head
     env:
       # uv reads no configuration of a checked-out tree.
       UV_NO_CONFIG: "1"
@@ -233,9 +270,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPS_TOKEN: ${{ steps.app-token.outputs.token }}
         run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-dispatch.sh"
+      - name: Mint a read-only token of the repositories the pull request names
+        id: read-token
+        uses: ./.catena-ci/.github/actions/read-token
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          pull-request: ${{ github.event.workflow_run.pull_requests[0].number }}
+          base: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
+          head: ${{ github.event.workflow_run.head_sha }}
       - name: Post the commit status ci / gate
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_READ_TOKEN: ${{ steps.read-token.outputs.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.workflow_run.pull_requests[0].number }}
           SHA: ${{ github.event.workflow_run.head_sha }}
@@ -378,9 +425,11 @@ jobs:
     # The workflow policy of the pull request head (README.md, "Workflow
     # policy"): its files are read through the API as data, never checked out
     # or run.
+    # A new base (a stacked pull request retargeted) is judged again.
     if: >-
       github.event_name == 'pull_request_target' &&
-      contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action)
+      (contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action) ||
+      (github.event.action == 'edited' && github.event.changes.base))
     runs-on: ${{ inputs.runner }}
     # The policy App's client id and private key are secrets of the caller's
     # environment workflow-policy.
@@ -392,7 +441,8 @@ jobs:
       group: policy-${{ github.repository }}-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     permissions:
-      contents: read # the CI code
+      contents: read # the CI code and the lock files
+      pull-requests: read # the pull request body
     steps:
       - name: The policy App
         # Without the App the job posts nothing, so a caller runs before the
@@ -408,8 +458,8 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Mint a policy App token
-        # Reads the pull request, its files and the first-party commits of
-        # every repository the App is installed on, and posts the status.
+        # This repository alone: reads the pull request and its files, and
+        # posts the status.
         if: steps.app.outputs.enabled == 'true'
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -417,6 +467,7 @@ jobs:
           client-id: ${{ secrets.POLICY_APP_CLIENT_ID }}
           private-key: ${{ secrets.POLICY_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
           permission-contents: read
           permission-pull-requests: read
           permission-statuses: write
@@ -435,6 +486,17 @@ jobs:
       - name: Install the YAML parser
         if: steps.app.outputs.enabled == 'true'
         run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      - name: Mint a read-only policy App token of the repositories the pull request names
+        # The rule merged compares their commits.
+        if: steps.app.outputs.enabled == 'true'
+        id: read-token
+        uses: ./.catena-ci/.github/actions/read-token
+        with:
+          client-id: ${{ secrets.POLICY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.POLICY_APP_PRIVATE_KEY }}
+          pull-request: ${{ github.event.pull_request.number }}
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
       - name: Fetch the pull request's files
         if: steps.app.outputs.enabled == 'true'
         env:
@@ -470,6 +532,7 @@ jobs:
         if: steps.app.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_READ_TOKEN: ${{ steps.read-token.outputs.token }}
           REPO: ${{ github.repository }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           ZIZMOR: ${{ steps.zizmor.outputs.status }}

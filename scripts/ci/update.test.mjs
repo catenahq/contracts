@@ -1,6 +1,6 @@
-// update.mjs with a gh stub on PATH: gh answers `gh api <path>`, `gh pr list`
-// and `gh search prs` from a JSON state file built from the payloads under
-// fixtures/update/, and logs each POST and PUT to a file. Run with
+// update.mjs with a gh stub on PATH: gh answers `gh api <path>` and `gh pr
+// list` from a JSON state file built from the payloads under fixtures/update/,
+// and logs each POST and PUT to a file. Run with
 // `node scripts/ci/update.test.mjs`.
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
@@ -14,10 +14,7 @@ const SCRIPT = join(HERE, "update.mjs");
 const load = (name) => JSON.parse(readFileSync(join(HERE, "fixtures", "update", `${name}.json`), "utf-8"));
 const [ROW] = load("pr-list");
 const [RUN] = load("check-runs").check_runs;
-const [MERGED_PULL] = load("commit-pulls");
-const [HIT] = load("search-prs");
 const PULL = load("pull");
-const CONTENTS = load("contents");
 
 const work = mkdtempSync(join(tmpdir(), "catena-update-test-"));
 const bin = join(work, "bin");
@@ -25,9 +22,10 @@ mkdirSync(bin);
 
 // gh api <path>: state.get[path]; gh api -X POST|PUT <path> -f k=v...: the
 // fields, appended as a JSON line to STUB_WRITES. gh pr list: state.pulls of
-// the --repo, filtered by --base, projected to --json. gh search prs:
-// state.search[<query>], projected to --json. state.fail lists fragments of a
-// path, or of "pr list <repo>" and "search <query>", that answer an error.
+// the --repo, filtered by --base, projected to --json. state.fail lists
+// fragments of a path, or of "pr list <repo>", that answer an error. A read
+// under a prefix of state.tokens answers only that token, anything else only
+// "tok".
 writeFileSync(
   join(bin, "gh"),
   `#!/usr/bin/env node
@@ -37,8 +35,10 @@ const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const fail = (key) => { if ((state.fail || []).some((f) => key.includes(f))) { console.error("gh: HTTP 500"); process.exit(1); } };
 const pick = (rows) => { const keys = flag("--json").split(","); return rows.map((r) => Object.fromEntries(keys.map((k) => [k, r[k]]))); };
-if (process.env.GH_TOKEN !== "tok") { console.error("gh: no token"); process.exit(4); }
+const token = process.env.GH_TOKEN;
+if (token !== "tok" && !Object.values(state.tokens || {}).includes(token)) { console.error("gh: no token"); process.exit(4); }
 if (args[0] === "pr" && args[1] === "list") {
+  if (token !== "tok") process.exit(4);
   if (flag("--state") !== "open") process.exit(2);
   const repo = flag("--repo");
   const base = flag("--base");
@@ -46,17 +46,12 @@ if (args[0] === "pr" && args[1] === "list") {
   console.log(JSON.stringify(pick((state.pulls[repo] || []).filter((p) => !base || p.baseRefName === base))));
   process.exit(0);
 }
-if (args[0] === "search" && args[1] === "prs") {
-  if (flag("--state") !== "open" || flag("--match") !== "body" || !flag("--owner")) process.exit(2);
-  const query = args[args.length - 1];
-  fail("search " + query);
-  console.log(JSON.stringify(pick((state.search || {})[query] || [])));
-  process.exit(0);
-}
 if (args[0] !== "api") process.exit(2);
 const method = args[1] === "-X" ? args[2] : "GET";
 const path = method === "GET" ? args[1] : args[3];
 fail(path);
+const owner = Object.entries(state.tokens || {}).find(([prefix]) => path.startsWith(prefix));
+if (token !== (owner && method === "GET" ? owner[1] : "tok")) { console.error("gh: Not Found (HTTP 404)"); process.exit(1); }
 if (method !== "GET") {
   const fields = { method, path };
   for (let i = 4; i < args.length; i += 2) {
@@ -99,24 +94,31 @@ const pull = (repo, number, extra = {}) => ({ [`repos/${repo}/pulls/${number}`]:
 const MERGED = { state: "closed", merged_at: "2026-11-20T00:00:00Z" };
 
 let n = 0;
-function exec({ pulls = [], get = {}, search = {}, fail = [] } = {}, { event = "workflow_run", args = [] } = {}) {
+function exec({ pulls = [], get = {}, fail = [], tokens = {} } = {}, { event = "workflow_run", args = [], env = {} } = {}) {
   const dir = join(work, `run${n++}`);
   mkdirSync(dir);
   const writes = join(dir, "writes");
+  const summary = join(dir, "summary");
   writeFileSync(writes, "");
+  writeFileSync(summary, "");
   const state = join(dir, "state.json");
-  writeFileSync(state, JSON.stringify({ pulls: { [REPO]: pulls }, get, search, fail }));
-  const r = spawnSync(process.execPath, [SCRIPT, "--repo", REPO, "--event", event, ...args], {
+  writeFileSync(state, JSON.stringify({ pulls: { [REPO]: pulls }, get, fail, tokens }));
+  // A workflow run's head that no pull request has, unless args name one.
+  const runHead = event === "workflow_run" && !args.includes("--sha") ? ["--sha", "9".repeat(40)] : [];
+  const r = spawnSync(process.execPath, [SCRIPT, "--repo", REPO, "--event", event, ...runHead, ...args], {
     encoding: "utf-8",
-    env: { PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME, GH_TOKEN: "tok", STUB_STATE: state, STUB_WRITES: writes },
+    env: {
+      PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME, GH_TOKEN: "tok", STUB_STATE: state, STUB_WRITES: writes,
+      GITHUB_STEP_SUMMARY: summary, ...env,
+    },
   });
   const lines = readFileSync(writes, "utf-8").trim().split("\n").filter(Boolean);
-  return { status: r.status, out: r.stdout, err: r.stderr, writes: lines.map((l) => JSON.parse(l)) };
+  return { status: r.status, out: r.stdout, err: r.stderr, writes: lines.map((l) => JSON.parse(l)), summary: readFileSync(summary, "utf-8") };
 }
 
 // The pull requests updated with their base, in order, each with expected_head_sha its listed head.
-function expectUpdated(label, got, numbers, said = []) {
-  assert.equal(got.status, 0, `${label}: exit ${got.status}\n${got.err}`);
+function expectUpdated(label, got, numbers, said = [], status = 0) {
+  assert.equal(got.status, status, `${label}: exit ${got.status}\n${got.err}`);
   const puts = got.writes.filter((w) => w.method === "PUT").map((w) => [w.path, w.expected_head_sha]);
   assert.deepEqual(puts, numbers.map((x) => [`repos/${REPO}/pulls/${x}/update-branch`, head(x)]), `${label}\n${got.out}`);
   for (const s of said) assert.ok(got.out.includes(s), `${label}: '${s}' not in\n${got.out}`);
@@ -157,6 +159,11 @@ try {
   const dep = { body: "text\nDepends-on: catenahq/ops#12" };
   skipped("open Depends-on", pr(1, dep), { ...gate(1), ...pull("catenahq/ops", 12) }, "waiting for catenahq/ops#12");
   expectUpdated("merged Depends-on", exec({ pulls: [pr(1, dep), pr(2)], get: { ...gate(1), ...gate(2), ...pull("catenahq/ops", 12, MERGED) } }), [1]);
+  // Another repository's pull request is read with GH_READ_TOKEN, the
+  // read-only token; the update is written with GH_TOKEN.
+  const privateDep = { pulls: [pr(1, dep)], get: { ...gate(1), ...pull("catenahq/ops", 12, MERGED) }, tokens: { "repos/catenahq/ops/": "read" } };
+  expectUpdated("read token", exec(privateDep, { env: { GH_READ_TOKEN: "read" } }), [1]);
+  assert.equal(exec(privateDep).status, 1, "a dependency GH_TOKEN cannot read is an error");
 
   // Each base on its own: one update on main and one on release.
   expectUpdated("release base", exec({ pulls: [pr(1), pr(2, { base: "release" }), pr(3, { base: "release" })], get: { ...gate(1), ...gate(2), ...gate(3) } }), [1, 2], [
@@ -170,103 +177,47 @@ try {
   expectUpdated("app-tests", exec(apps, { args: ["--apps"] }), [3], ["main: skip #1: app-tests pending", "main: skip #2: app-tests not reported"]);
   expectUpdated("app-tests not asked", exec(apps), [1]);
 
-  // On push: the open pull requests of the owner that name the pull request
-  // merged as the pushed commit get their status; search hits that do not
-  // name it are dropped. A pull request whose merge commit is another one is
-  // not looked up. Another repository waits for app-tests when its
-  // checks.yml at the head declares apps; one without checks.yml (404) does
-  // not; this repository follows --apps.
-  const MERGE = "c".repeat(40);
-  const OPS_HEAD = "d".repeat(40);
-  const DEMO_HEAD = "e".repeat(40);
-  const TPL_HEAD = "f".repeat(40);
-  const WEB_HEAD = "b".repeat(40);
-  const line = `Depends-on: ${REPO}#5`;
-  const checksYml = (repo, sha, text) => ({
-    [`repos/${repo}/contents/.github/checks.yml?ref=${sha}`]: { ...CONTENTS, content: Buffer.from(text).toString("base64") },
-  });
-  const fanOut = {
-    get: {
-      [`repos/${REPO}/commits/${MERGE}/pulls`]: [
-        { ...MERGED_PULL, number: 5, merge_commit_sha: MERGE },
-        { ...MERGED_PULL, number: 6 },
-      ],
-      ...pull(REPO, 5, MERGED),
-      ...pull("catenahq/ops", 7, { body: line, head: { sha: OPS_HEAD } }),
-      ...pull("catenahq/docs", 3, { body: `${line}0` }),
-      ...pull(REPO, 9, { body: `${line}\nDepends-on: catenahq/ops#12`, head: { sha: DEMO_HEAD } }),
-      ...pull("catenahq/ops", 12),
-      [`repos/${REPO}/commits/${DEMO_HEAD}/status?per_page=100`]: { statuses: [] },
-      [`repos/catenahq/ops/contents/.github/checks.yml?ref=${OPS_HEAD}`]: CONTENTS,
-      ...pull("catenahq/catena-templates", 4, { body: line, head: { sha: TPL_HEAD } }),
-      ...checksYml("catenahq/catena-templates", TPL_HEAD, ["apps:", "  inputs: [blueprints]", "gates: {}", ""].join("\n")),
-      [`repos/catenahq/catena-templates/commits/${TPL_HEAD}/status?per_page=100`]: { statuses: [] },
-      ...pull("catenahq/website", 2, { body: line, head: { sha: WEB_HEAD } }),
-    },
-    search: {
-      [line]: [
-        { ...HIT, number: 7, repository: { name: "ops", nameWithOwner: "catenahq/ops" } },
-        { ...HIT, number: 3, repository: { name: "docs", nameWithOwner: "catenahq/docs" } },
-        { ...HIT, number: 9, repository: { name: "demo", nameWithOwner: REPO } },
-        { ...HIT, number: 4, repository: { name: "catena-templates", nameWithOwner: "catenahq/catena-templates" } },
-        { ...HIT, number: 2, repository: { name: "website", nameWithOwner: "catenahq/website" } },
-      ],
-    },
-  };
-  const pushed = exec(fanOut, { event: "push", args: ["--sha", MERGE, "--apps"] });
-  assert.equal(pushed.status, 0, pushed.err);
-  assert.deepEqual(
-    pushed.writes.map((w) => [w.method, w.path, w.context, w.state, w.description]),
-    [
-      ["POST", `repos/catenahq/ops/statuses/${OPS_HEAD}`, "ci / gate", "success", "no open dependency"],
-      ["POST", `repos/${REPO}/statuses/${DEMO_HEAD}`, "ci / gate", "pending", "waiting for catenahq/ops#12"],
-      ["POST", `repos/catenahq/catena-templates/statuses/${TPL_HEAD}`, "ci / gate", "pending", "waiting for app-tests"],
-      ["POST", `repos/catenahq/website/statuses/${WEB_HEAD}`, "ci / gate", "success", "no open dependency"],
-    ],
-    pushed.out,
-  );
-  // Without --apps, only another repository's checks.yml asks for app-tests.
-  const noApps = exec(fanOut, { event: "push", args: ["--sha", MERGE] });
-  assert.equal(noApps.status, 0, noApps.err);
-  assert.deepEqual(
-    noApps.writes.map((w) => [w.path, w.state, w.description]),
-    [
-      [`repos/catenahq/ops/statuses/${OPS_HEAD}`, "success", "no open dependency"],
-      [`repos/${REPO}/statuses/${DEMO_HEAD}`, "pending", "waiting for catenahq/ops#12"],
-      [`repos/catenahq/catena-templates/statuses/${TPL_HEAD}`, "pending", "waiting for app-tests"],
-      [`repos/catenahq/website/statuses/${WEB_HEAD}`, "success", "no open dependency"],
-    ],
-  );
-  assert.ok(pushed.out.includes("catenahq/ops#7: ci / gate success"), pushed.out);
-  // Another event does not look the merged pull request up.
-  assert.equal(exec(fanOut).writes.length, 0);
+  // A failed update is reported and the next candidate, and the next base,
+  // still updated; the run then exits 1.
+  const refused = exec({ pulls: [pr(1), pr(2), pr(3, { base: "release" })], get: { ...gate(1), ...gate(2), ...gate(3) }, fail: ["pulls/1/update-branch"] });
+  expectUpdated("failed update", refused, [2, 3], ["main: updated #2", "release: updated #3"], 1);
+  assert.ok(refused.err.includes("::error::update: main: #1 not updated: gh api -X failed"), refused.err);
+  assert.ok(refused.summary.startsWith("- update failed: main: #1 not updated: "), refused.summary);
 
-  // On schedule: every open pull request of the repository with a Depends-on line.
-  const scheduled = exec(
-    {
-      pulls: [pr(1, { state: "BLOCKED", ...dep }), pr(2, { state: "BLOCKED", auto: false })],
-      get: { ...gate(1), ...pull(REPO, 1, dep), ...pull("catenahq/ops", 12, MERGED) },
-    },
-    { event: "schedule" },
-  );
+  // On schedule: every open pull request of the repository.
+  const open = {
+    pulls: [pr(1, { state: "BLOCKED", ...dep }), pr(2, { state: "BLOCKED", auto: false })],
+    get: { ...gate(1), ...gate(2, "in_progress"), ...pull(REPO, 1, dep), ...pull(REPO, 2), ...pull("catenahq/ops", 12, MERGED) },
+  };
+  const scheduled = exec(open, { event: "schedule" });
   assert.equal(scheduled.status, 0, scheduled.err);
   assert.deepEqual(
-    scheduled.writes.map((w) => [w.path, w.state]),
-    [[`repos/${REPO}/statuses/${head(1)}`, "success"]],
+    scheduled.writes.map((w) => [w.path, w.state, w.description]),
+    [
+      [`repos/${REPO}/statuses/${head(1)}`, "success", "no open dependency"],
+      [`repos/${REPO}/statuses/${head(2)}`, "pending", "waiting for checks"],
+    ],
   );
+  // On workflow_run: the open pull requests whose head the run judged, once
+  // its checks ended; with --apps dispatch posts it.
+  const ran = exec(open, { args: ["--sha", head(1)] });
+  assert.equal(ran.status, 0, ran.err);
+  assert.deepEqual(ran.writes.map((w) => [w.path, w.state]), [[`repos/${REPO}/statuses/${head(1)}`, "success"]]);
+  assert.equal(exec(open, { args: ["--sha", head(1), "--apps"] }).writes.length, 0);
+  // A push updates the bases and recomputes no status: each repository's own
+  // runs recompute its pull requests.
+  const pushed = exec(open, { event: "push" });
+  assert.equal(pushed.status, 0, pushed.err);
+  assert.equal(pushed.writes.length, 0);
 
   // A GitHub API error exits 1 and updates nothing: a failed query is never "no candidate".
   const ready = { pulls: [pr(1)], get: gate(1) };
-  const push = { event: "push", args: ["--sha", MERGE] };
   for (const [label, state, opts] of [
     ["check runs", { ...ready, fail: ["check-runs"] }],
     ["pr list", { ...ready, fail: [`pr list ${REPO}`] }],
-    ["update-branch", { ...ready, fail: ["update-branch"] }],
     ["app-tests status", ready, { args: ["--apps"] }],
     ["Depends-on pull request", { pulls: [pr(1, dep)], get: gate(1) }],
-    ["commit pulls", { ...fanOut, fail: [`commits/${MERGE}/pulls`] }, push],
-    ["search", { ...fanOut, fail: [`search ${line}`] }, push],
-    ["checks.yml", { ...fanOut, fail: ["catena-templates/contents/"] }, push],
+    ["status recompute", { ...open, fail: [`pulls/1`] }, { event: "schedule" }],
   ]) {
     const got = exec(state, opts);
     assert.equal(got.status, 1, `${label}: exit ${got.status}\n${got.err}`);
@@ -275,7 +226,9 @@ try {
   }
 
   // Bad arguments exit 2 and call nothing.
-  for (const args of [["--repo", "x"], ["--event", "pull_request"], ["--event", "push"], ["--event", "push", "--sha", "abc"], ["--bogus"]]) {
+  for (const args of [
+    ["--repo", "x"], ["--event", "pull_request"], ["--event", "workflow_run"], ["--event", "workflow_run", "--sha", "abc"], ["--bogus"],
+  ]) {
     const r = spawnSync(process.execPath, [SCRIPT, "--repo", REPO, "--event", "schedule", ...args], {
       encoding: "utf-8",
       env: { PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: "tok" },

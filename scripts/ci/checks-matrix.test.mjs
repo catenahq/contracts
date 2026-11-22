@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildMatrix, declaredSecrets, SIBLINGS } from "./checks-matrix.mjs";
+import { buildMatrix, declaredSecrets, declaresApps, SIBLINGS } from "./checks-matrix.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, "checks-matrix.mjs");
@@ -215,6 +215,12 @@ refuses({}, "checks.python.siblings.catena-admin.token: CATENA_EE_READ_TOKEN is 
   // A check of another name than the app entries' stays a check.
   const named = matrix("ci-runner", { checks: "checks:\n  app-ci: {}\n  apps: {}\n" });
   assert.deepEqual(named.include.map((e) => [e.name, e.kind]), [["app-ci", "check"], ["apps", "check"]]);
+  // declaresApps, the answer every reader that waits for app-tests uses, is
+  // the plan's apps.enabled.
+  for (const checks of ["gates: {}\napps: {catalog: true}\n", "gates: {}\n", CHECKS["ci-runner"], "checks:\n  apps: {}\n"]) {
+    assert.equal(declaresApps(checks), matrix("ci-runner", { checks }).apps.enabled, checks);
+  }
+  assert.equal(declaresApps(""), false, "an empty checks.yml");
 }
 
 // Each refusal names its key.

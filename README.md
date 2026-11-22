@@ -295,8 +295,9 @@ check that names no `runs-on`. These jobs run:
 - `gate` is the status a branch rule requires. It runs unless the run is
   cancelled and fails on a draft pull request, on a `plan` that did not
   succeed, or on a `check`, `scan` or `scan-daily` result other than success
-  or skipped. On a pull request that passed, it then posts the commit status
-  `ci / gate` (see "Gate status").
+  or skipped. On a pull request of this repository that passed, it then posts
+  the commit status `ci / gate` (see "Gate status"); on one from a fork, whose
+  token is read-only, it prints a notice and posts nothing.
 
 `.github/checks.yml` is data; the parser fails on any key it does not know and
 names it:
@@ -383,6 +384,9 @@ these lines:
   git pathspecs, globs included;
 - `sib:<repo>=<commit>` for each sibling the entry names, sorted;
 - `workflow=<job.workflow_sha>`;
+- `provenance-age=<true|false>` for an entry of kind `app`: `PROVENANCE_CHECK_AGE`,
+  `true` on a pull request from a fork, whose provenance check asks a year of
+  age;
 - `date=<UTC yyyy-mm-dd>` for the scan and an entry of kind `app`, whose
   findings follow the vulnerability feed.
 
@@ -454,37 +458,59 @@ repository can download its artifacts.
 
 `ci / gate` is the required context. Two things report under that name: the
 check run of the job `gate` (called from the caller's job `ci`), and the commit
-status `scripts/ci/gate-status.mjs` posts from that job's last steps. A failed
-or cancelled need, or a draft, fails the check run and the status step never
-runs, so a failed result posts no success. When a check and a commit status have
-the same name, both must pass: a merge waits until the `ci / gate` check run and
-the `ci / gate` status are both success.
+status `scripts/ci/gate-status.mjs` posts from that job's last steps and from
+`control.yml`. A failed or cancelled need, or a draft, fails the check run and
+the status step never runs, so a failed result posts no success. When a check
+and a commit status have the same name, both must pass: a merge waits until the
+`ci / gate` check run and the `ci / gate` status are both success.
 
-    node gate-status.mjs --repo <owner/name> --pr <n> --sha <head sha> [--app-tests]
+    node gate-status.mjs --repo <owner/name> --pr <n> --sha <head sha>
+                         [--app-tests | --apps-from <sha> --expect-apps <true|false>] [--gate-job]
 
 `GH_TOKEN` authenticates `gh`. The script reads the pull request body for
-lines of exactly `Depends-on: catenahq/<repo>#<n>` and posts the whole state on
-every call, so the newest post is right:
+lines of exactly `Depends-on: catenahq/<repo>#<n>`, and the newest `ci / gate`
+check run that GitHub Actions made on the sha (a check run of another App is
+ignored). It posts the whole state on every call, so the newest post is right:
 
+- with app-tests, `failure` (`app-tests failed`) when the newest `app-tests`
+  status of the sha is a failure or error;
+- `failure` (`ci / gate check run <conclusion>`) when the check run completed
+  with anything but success;
 - `pending`, `waiting for catenahq/<repo>#<n>` for the first named pull request
   that is open, or `catenahq/<repo>#<n> closed without merging` for one closed
   unmerged (it can reopen); a pull request counts once its `merged_at` is set;
-- with `--app-tests`, `failure` when the newest `app-tests` status of the sha is
-  a failure or error, and `pending` (`waiting for app-tests`) when there is none
-  or it is pending;
+- `pending` (`waiting for checks`) while the check run is missing, queued or in
+  progress;
+- with app-tests, `pending` (`waiting for app-tests`) when the `app-tests`
+  status is missing or pending;
 - `success`, `no open dependency`, otherwise.
 
-A line that starts with `Depends-on:` and does not match the pattern is ignored
-with a warning on stderr. A dependency in another repository is read with the
-same token. The description is cut at 140 characters, and `target_url` is the
-run's URL when `GITHUB_SERVER_URL`, `GITHUB_REPOSITORY` and `GITHUB_RUN_ID` are
-set. The script exits 1 on a GitHub API error, an unreadable dependency
-included, and 2 on bad arguments.
+So the status turns success only after the checks passed, whichever job posts
+it. `--gate-job` skips the check run: the `gate` job is the run being judged.
+App-tests are waited for with `--app-tests`, or with `--apps-from <sha>` when
+`.github/checks.yml` at that commit, read through the contents API as data,
+declares `apps` (`checks-matrix.mjs` answers, as it does for `plan`; a 404 is
+no checks.yml). `--expect-apps` is the caller's `apps` input: when it differs
+from that answer, the script posts `failure` naming both and exits 1.
 
-The `gate` job runs it on `pull_request`, and the `depends` job of
-`control.yml` on each `pull_request_target` event (see "Control workflow"),
-both with `contents: read`, `statuses: write` and `pull-requests: read`.
-`scripts/ci/gate-status.test.mjs` drives it with a `gh` stub on `PATH`.
+A line that starts with `Depends-on:` and does not match the pattern is ignored
+with a warning on stderr. The dependencies are read with `GH_READ_TOKEN` when it
+is set, the read-only token of the repositories the pull request names (see
+"Control workflow"), else with `GH_TOKEN`. The description is cut at 140
+characters, and `target_url` is the run's URL when `GITHUB_SERVER_URL`,
+`GITHUB_REPOSITORY` and `GITHUB_RUN_ID` are set. The script exits 1 on a GitHub
+API error, an unreadable dependency included, and 2 on bad arguments; with
+`--gate-job` a dependency it cannot read posts `pending` (`waiting for the
+control run`), never success or failure, and the control run posts the state.
+
+The `gate` job runs it on a pull request of this repository with
+`--gate-job`, and with `--app-tests` when the plan's `apps.enabled` is true,
+with `contents: read`, `statuses: write` and `pull-requests: read`; its token
+reads only this repository and public ones. The `depends` job of
+`control.yml` runs it on each `pull_request_target` event with `--apps-from`
+the base commit and the read-only token, and `checks: read` besides (see
+"Control workflow"). `scripts/ci/gate-status.test.mjs` drives it with a `gh` stub on
+`PATH`.
 
 ### Scan
 
@@ -616,26 +642,45 @@ request out, as data its tools read (see "App dispatch"). The workflow declares
 no secret: the CI App's are those of the caller's environment `ci`, the
 policy App's those of its environment `workflow-policy`.
 
+Every App token that writes covers the caller's repository alone (`dispatch`'s
+covers ops alone). A read of another repository (a Depends-on pull request, a
+first-party commit the policy compares) takes a second token,
+`.github/actions/read-token`: contents and pull requests read, for the
+repositories `scripts/ci/read-scope.mjs` lists. Those are the caller's and every
+catenahq repository that the lock files at the pull request's base and head
+commits and its body's Depends-on lines name, each once, or for the updater
+those the Depends-on lines of every open pull request name; more than 15 fail
+the job. The scripts read with it as `GH_READ_TOKEN` and write with `GH_TOKEN`.
+`scripts/ci/read-scope.test.mjs` drives the list with a `gh` stub on `PATH`.
+
 | Input | Meaning |
 | --- | --- |
 | `runner` | Required. The runner label of every job. |
-| `apps` | `true`: the `ci / gate` status and the updater also wait for the `app-tests` status, and `dispatch` and `tag` run. Default `false`. |
+| `apps` | `true`: the `ci / gate` status and the updater also wait for the `app-tests` status, and `dispatch` and `tag` run. It must match whether the caller's `.github/checks.yml` declares `apps`. Default `false`. |
 | `release` | `true` for a repository released from its `release` branch: `release` runs. Default `false`. |
 | `step`, `version` | The release step (`cut`, `tag`, `merge-back`) and version (`vX.Y.Z`) of a `workflow_dispatch` run. Default empty. |
 
 - `depends` runs on `pull_request_target` and posts the commit status `ci /
-  gate` of the pull request head with `gate-status.mjs` (`--app-tests` with
-  `apps`), with `contents: read`, `statuses: write` and `pull-requests: read`.
-  An edited body changes the status at once, without a new check run.
+  gate` of the pull request head with `gate-status.mjs`, waiting for app-tests
+  when the base commit's `.github/checks.yml` declares `apps`, with the input
+  `apps` as the cross-check (`--apps-from`, `--expect-apps`), with `contents:
+  read`, `statuses: write`, `pull-requests: read` and `checks: read`, and the
+  read-only token of the CI App, minted in the caller's environment `ci`. An
+  edited body changes the status at once, without a new check run. Statuses
+  are per commit: a second pull request from the same head into another base
+  can overwrite the status; the gate and the required check judge each
+  branch's own pull request.
 - `update` runs on `push`, `workflow_run`, `schedule` and on
   `pull_request_target` of type `auto_merge_enabled`, in the caller's
   environment `ci` (`deployment: false`). It mints a token of the CI App from
   the environment's `RENOVATE_APP_CLIENT_ID` and `RENOVATE_APP_PRIVATE_KEY` for
-  every repository the App is installed on, with contents and pull requests
-  write, statuses write and checks read, and runs `scripts/ci/update.mjs` with
-  it. Its concurrency group is `update-<owner/name>` without
-  `cancel-in-progress`: one updater runs per repository, and a newer run
-  replaces the one waiting.
+  this repository alone, with contents, pull requests, statuses and workflows
+  write (updating a branch writes a ref whose new
+  history can hold the base's workflow changes) and checks read, and the
+  read-only token, and runs `scripts/ci/update.mjs` with them; the job holds
+  `contents: read` and `pull-requests: read`. Its concurrency group is
+  `update-<owner/name>` without `cancel-in-progress`: one updater runs per
+  repository, and a newer run replaces the one waiting.
 - `dispatch`, with `apps`, runs on the `workflow_run` of a `ci` run of a pull
   request of this repository that was not cancelled, and sends its app to the
   app tests (see "App dispatch").
@@ -644,12 +689,13 @@ policy App's those of its environment `workflow-policy`.
 - `release`, with `release`, runs on a `workflow_dispatch` on `main` and runs
   the step it names (see "Release").
 - `policy` runs on `pull_request_target` of type `opened`, `synchronize` and
-  `reopened` and posts the commit status `workflow policy` of the head (see
-  "Workflow policy").
+  `reopened`, and of type `edited` when the base changed, and posts the commit
+  status `workflow policy` of the head (see "Workflow policy").
 
-`update` runs the updater with the token as `GH_TOKEN`:
+`update` runs the updater with the token as `GH_TOKEN`, and `--sha` on
+`workflow_run` the head the `ci` run judged:
 
-    node update.mjs --repo <owner/name> --event <name> [--sha <pushed commit>] [--apps]
+    node update.mjs --repo <owner/name> --event <name> [--sha <run head>] [--apps]
 
 On every event, for each of the bases `main` and `release`, the candidates are
 its open pull requests with auto-merge on, oldest first:
@@ -662,7 +708,9 @@ its open pull requests with auto-merge on, oldest first:
   has a newest `app-tests` status of `success`, and has no open Depends-on
   pull request, is updated with `PUT repos/<r>/pulls/<n>/update-branch` and
   `expected_head_sha` set to the head it read. The update pushes a commit, so
-  `ci` runs again on it and its `workflow_run` runs the updater again.
+  `ci` runs again on it and its `workflow_run` runs the updater again. A failed
+  update is printed as an error and added to the job summary, the next
+  candidate is tried, and the run fails once every base is done.
 - Every other candidate is skipped with its reason printed: `DIRTY`, any other
   merge state (`not behind its base (<state>)`), draft, no gate check run, a
   gate check run going or not successful, app-tests not passed, the first open
@@ -674,18 +722,17 @@ carries the Depends-on and app-tests verdicts, and the updater reads those
 from their sources itself. A check run of another App is ignored: any App
 with checks write can create a check run of any name.
 
-On `push`, each pull request merged as the pushed commit (`repos/<r>/commits/<sha>/pulls`
-with `merge_commit_sha` equal to it) is looked up with `gh search prs --owner
-<owner> --state open --match body "Depends-on: <owner/name>#<n>"`; each hit
-whose body has that Depends-on line gets its `ci / gate` status recomputed and
-posted, as `gate-status.mjs` does. It waits for app-tests (`--app-tests`) for
-a pull request of this repository with `--apps`, and for one of another
-repository whose `.github/checks.yml` at the pull request head, read through
-the contents API and parsed as data, has the key `apps`; a 404 means no
-checks.yml and no app-tests, and any other failed read fails the run. The job
-installs the npm `yaml` of `scripts/ci/` for that parse. The search index lags, so on `schedule` every
-open pull request of this repository with a Depends-on line gets its status
-recomputed too; the caller's hourly schedule bounds the delay.
+The updater writes to its own repository only. On `workflow_run` without
+`--apps`, each open pull request of this repository whose head is the one the
+`ci` run judged gets its `ci / gate` status recomputed and posted, as
+`gate-status.mjs` does: the `gate` job of a pull request from a fork posts
+none, and `depends` ran before its checks ended. With `--apps`, `dispatch`
+posts it after the same run. On `schedule`, every open pull request of this
+repository gets its status recomputed, waiting for app-tests with `--apps`.
+That is how a merged Depends-on pull request reaches its dependents, in any
+repository: each repository's hourly run recomputes its own, so a merge
+reaches them within the hour, and a newer updater run that replaced a waiting
+one is caught up the same way.
 
 A GitHub API error exits 1 and nothing after it runs: a failed query never
 reads as "no candidate". Bad arguments exit 2. `scripts/ci/update.test.mjs`
@@ -699,7 +746,7 @@ the app a pull request changes, once its `ci` run completed. `workflow_run`
 lists no pull request of a fork, so the job runs for a pull request of the
 caller's own repository only. It runs in the caller's environment `ci`, where
 it mints a CI App token that writes to ops alone, and holds `contents: read`,
-`statuses: write` and `pull-requests: read`. A newer head of the same pull
+`statuses: write`, `pull-requests: read` and `checks: read`. A newer head of the same pull
 request cancels the send still running for an older one.
 
 The tools are the base's: the caller is checked out at the default branch, the
@@ -735,7 +782,8 @@ nothing of it runs. `scripts/ci/app-dispatch.sh` then:
   runs), `apps.own-images` joined by commas, the two locked commits and the
   pull request number.
 
-The job then posts the `ci / gate` status with `gate-status.mjs --app-tests`.
+The job then posts the `ci / gate` status with `gate-status.mjs --app-tests`,
+reading the dependencies with the read-only token.
 A GitHub API or git error fails the step: a failed read is never "no verdict".
 
 ### App tag
@@ -824,11 +872,13 @@ The `policy` job of `control.yml` judges what a pull request makes CI run. It
 runs in the caller's environment `workflow-policy` (`deployment: false`),
 whose branch rule admits `main` and `release`, the bases a pull request
 targets, and which holds the policy App's `POLICY_APP_CLIENT_ID` and
-`POLICY_APP_PRIVATE_KEY`, with `contents: read`. When `POLICY_APP_CLIENT_ID` is
-empty it prints a notice and posts nothing. Otherwise it mints a policy App
-token for every repository the App is installed on (contents and pull requests
-read, statuses write), loads `scripts/ci/workflow-policy.mjs` from contracts at
-`job.workflow_sha`, and:
+`POLICY_APP_PRIVATE_KEY`, with `contents: read` and `pull-requests: read`. When
+`POLICY_APP_CLIENT_ID` is empty it prints a notice and posts nothing. Otherwise
+it mints a policy App token for this repository alone (contents and pull
+requests read, statuses write) and a read-only policy App token of the
+repositories the pull request names (see "Control workflow"), for the
+comparisons of the rule `merged`, loads `scripts/ci/workflow-policy.mjs` from
+contracts at `job.workflow_sha`, and:
 
 - `fetch` writes every file under `.github/` and every file the pull request
   changes, as they are at its head, into `$RUNNER_TEMP/policy/pr/`, the
@@ -840,8 +890,9 @@ read, statuses write), loads `scripts/ci/workflow-policy.mjs` from contracts at
   copies of the workflows and actions every inline `# zizmor:` directive is
   dropped, so the pull request suppresses no finding, and a `ci-control.yml`
   of the caller shape (rule `ci-control`) gets `# zizmor:
-  ignore[dangerous-triggers]` on its `pull_request_target:` line: the caller
-  runs on that trigger by design;
+  ignore[dangerous-triggers]` on its `pull_request_target:` and
+  `workflow_run:` lines, each of which zizmor reports: the caller runs on
+  those triggers by design;
 - scanctl, built by `.github/actions/scanctl`, runs zizmor alone over
   `$RUNNER_TEMP/policy/pr/` (`scripts/ci/workflow-policy-scanctl.yml`), its
   summary in the job summary;
@@ -858,13 +909,20 @@ The rules, each named in the summary:
   its digest.
 - `merged`: every first-party commit a `uses:` pins and every line of
   `.github/catenahq.lock` is an ancestor of the repository's `main`: the
-  compare API reads `ahead` or `identical` for `compare/<sha>...main`. A failed
-  comparison fails the rule.
+  compare API reads `ahead` or `identical` for `compare/<sha>...main`. A
+  first-party pin in a workflow is also the base's pin of the same workflow
+  file and referenced path, or a descendant of it (`compare/<base
+  pin>...<pin>` is `ahead` or `identical`), so no pin moves back; a pin the
+  base file does not have passes that test. A `uses:` is first-party when its
+  owner is the repository's in any case: GitHub resolves owner and repository
+  names without regard to case. The comparisons use the read-only token
+  (`GH_READ_TOKEN`), and a failed comparison fails the rule.
 - `secrets-inherit`: no job passes `secrets: inherit`.
-- `permissions`: every job has a `permissions:` block naming each scope, and
-  asks for no scope wider than its ceiling in `scripts/ci/workflow-policy.json`
-  under `<repository>:<workflow file>:<job>`. A job that asks for nothing needs
-  no ceiling.
+- `permissions`: every job gets its permissions from its own `permissions:`
+  block, else from the workflow's; they name each scope, and ask for no scope
+  wider than the job's ceiling in `scripts/ci/workflow-policy.json` under
+  `<repository>:<workflow file>:<job>`. A job with neither block fails. A job
+  that asks for nothing needs no ceiling.
 - `pull-request-target`: no job of a workflow run on `pull_request_target`, or
   of a workflow of the tree it calls, checks out the pull request's head or
   fetches it with git.
@@ -882,18 +940,27 @@ The rules, each named in the summary:
   commit, with no key but `uses`, `permissions` and `with` (no steps).
 - `zizmor`: scanctl passed.
 
-The summary also lists each changed path that runs in CI: under
-`.github/actions/`, `scripts/`, `ci/` or `build/`, and the lock files.
+The summary also lists each changed path that runs in CI or decides what
+runs: under `.github/actions/`, `scripts/`, `ci/`, `build/` or `.scanctl/`,
+`.github/checks.yml`, `scanctl.yml`, and the lock files.
 
 `scripts/ci/workflow-policy.json` is read at the contracts commit the caller
 pins, so a pull request cannot widen its own ceilings. It holds `secrets`, the
 secret names, and `permissions`, the ceiling of each job. A missing ceiling
 fails with the key to add. When a caller's job needs more, add or widen its key
 in contracts first, then pin the caller at that commit.
-`node scripts/ci/workflow-policy.mjs --seed` prints the ceilings of the `ci.yml`
-and `ci-control.yml` templates above for each repository that calls these
-workflows, and those of `pr.yml` and `control.yml` with their secret names; the
-file holds all of them, and the entries added by hand.
+
+    node scripts/ci/workflow-policy.mjs --seed [--local <repo>=<checkout>]... [--out <file>]
+
+writes the file (default `scripts/ci/workflow-policy.json`) from every
+workflow of every repository that calls these workflows: contracts from this
+tree, a repository named with `--local` from that checkout's working tree,
+each other one from its default branch through the contents API, read as
+data. Each job's permissions, its own block or the workflow's, are its
+ceiling; every `secrets.<NAME>` and every secret a job passes is an allowed
+name. The `ci.yml` and `ci-control.yml` templates above add their ceilings for
+each repository, the wider level of a scope winning. A failed read or a
+workflow that does not parse writes nothing and exits 1.
 
 Every repository has a `.github/CODEOWNERS` covering the paths whose code runs
 in CI; it asks for the owner's review, and no review is required. Every
@@ -910,7 +977,8 @@ contracts adds `/scripts/ @ma-lalonde`, and catena-templates adds
 
 `scripts/ci/workflow-policy.test.mjs` drives the script with a `gh` stub on
 `PATH` over the tree under `scripts/ci/fixtures/workflow-policy/`, which passes
-every rule, and over copies of it edited so that one rule fails.
+every rule, over copies of it edited so that one rule fails, and runs `--seed`
+over stubbed repositories.
 
 ## How to change a contract
 

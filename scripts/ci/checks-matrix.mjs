@@ -80,6 +80,11 @@ export function lockedRepos(text) {
   return repos;
 }
 
+// Whether a parsed checks.yml asks for the app checks: it has the key apps.
+// The plan's apps.enabled, and every reader that waits for app-tests, use it.
+const hasApps = (doc) => isMap(doc) && Object.hasOwn(doc, "apps");
+export const declaresApps = (checksText) => hasApps(parse(checksText));
+
 // The secret names a workflow's on.workflow_call.secrets declares.
 export function declaredSecrets(workflowText) {
   const secrets = parse(workflowText)?.on?.workflow_call?.secrets;
@@ -244,10 +249,10 @@ function scanEntry(value, locked) {
 // blueprints/<id>/ input. enabled is false when checks.yml has no apps key.
 // With catalog false the tools come from catena-templates at the lock, the
 // one sibling the entries read; own-images is space-separated.
-function appsSettings(value, locked, runner) {
-  const a = value === undefined ? { catalog: false } : keysOf("apps", value, APPS_KEYS);
+function appsSettings(enabled, value, locked, runner) {
+  const a = enabled ? keysOf("apps", value, APPS_KEYS) : { catalog: false };
   if (typeof a.catalog !== "boolean") fail("apps.catalog must be true (the tools of this tree) or false (catena-templates' at the lock)");
-  if (!a.catalog && value !== undefined && !locked.has(`${OWNER}/catena-templates`)) {
+  if (!a.catalog && enabled && !locked.has(`${OWNER}/catena-templates`)) {
     fail(`apps.catalog false reads the tools from catena-templates: ${OWNER}/catena-templates has no line in .github/catenahq.lock`);
   }
   const own = a["own-images"] ?? [];
@@ -265,7 +270,7 @@ function appsSettings(value, locked, runner) {
     gates: { "core-app-names": [], duplication: false },
   });
   return {
-    enabled: value !== undefined,
+    enabled,
     catalog: a.catalog,
     "own-images": own.join(" "),
     repo: { name: "apps-repo", ...entry("apps-repo", TIMEOUT_DEFAULT, APPS_REPO_INPUTS) },
@@ -282,7 +287,7 @@ export function buildMatrix({ checks, lock, secrets, runner, repo }) {
   if (typeof repo !== "string" || !REPO_NAME.test(repo)) fail("--repo needs the caller's repository name");
   const doc = keysOf(".github/checks.yml", parse(checks) ?? {}, ["gates", "checks", "scan", "apps"]);
   const locked = lockedRepos(lock);
-  const apps = appsSettings(doc.apps, locked, runner);
+  const apps = appsSettings(hasApps(doc), doc.apps, locked, runner);
   const include = [];
   if (doc.gates !== undefined) include.push(gatesEntry(doc.gates, locked, runner));
   if (doc.checks !== undefined) {
