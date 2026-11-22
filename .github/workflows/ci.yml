@@ -69,7 +69,7 @@ jobs:
         # Script tests: comment parsers, the gates on a deleted tracked file,
         # the new-failures-only and same-tree scripts, the checks matrix, the gate status,
         # the per-check reuse, the updater, the app checks, the app dispatch and tag,
-        # the release steps.
+        # the release steps, the workflow policy.
         uses: catenahq/contracts/.github/actions/new-failures-only@main
         with:
           working-directory: ${{ github.workspace }}
@@ -92,6 +92,7 @@ jobs:
             node scripts/ci/app-check.test.mjs
             node scripts/ci/app-dispatch-tag.test.mjs
             node scripts/ci/release.test.mjs
+            node scripts/ci/workflow-policy.test.mjs
 
   duplication:
     # Copy-paste ratchet: .jscpd.json carries the baseline threshold;

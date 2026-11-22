@@ -1,0 +1,255 @@
+{
+  "secrets": [
+    "CATENA_EE_READ_TOKEN",
+    "DOCKERHUB_TOKEN",
+    "DOCKERHUB_USERNAME",
+    "POLICY_APP_CLIENT_ID",
+    "POLICY_APP_PRIVATE_KEY",
+    "RENOVATE_APP_CLIENT_ID",
+    "RENOVATE_APP_PRIVATE_KEY"
+  ],
+  "permissions": {
+    "catena-admin:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "catena-admin:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "catena-ce:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "catena-ce:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "catena-templates:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "catena-templates:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "ci-runner:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "ci-runner:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "contracts:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "contracts:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "contracts:control.yml:depends": {
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "contracts:control.yml:dispatch": {
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "contracts:control.yml:policy": {
+      "contents": "read"
+    },
+    "contracts:control.yml:release": {
+      "contents": "read"
+    },
+    "contracts:control.yml:tag": {
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "read"
+    },
+    "contracts:control.yml:update": {
+      "contents": "read"
+    },
+    "contracts:pr.yml:check": {
+      "contents": "read"
+    },
+    "contracts:pr.yml:gate": {
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "contracts:pr.yml:plan": {
+      "actions": "read",
+      "contents": "read"
+    },
+    "contracts:pr.yml:scan": {
+      "contents": "read",
+      "pull-requests": "write",
+      "security-events": "write"
+    },
+    "contracts:pr.yml:scan-daily": {
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write"
+    },
+    "docs:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "docs:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "ops-templates:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "ops-templates:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "ops:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "ops:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "renovate-config:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "renovate-config:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "renovate:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "renovate:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "repertoire-entreprises:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "repertoire-entreprises:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "scanctl:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "scanctl:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    },
+    "website:ci-control.yml:control": {
+      "actions": "read",
+      "checks": "read",
+      "contents": "read",
+      "pull-requests": "read",
+      "statuses": "write"
+    },
+    "website:ci.yml:ci": {
+      "actions": "read",
+      "contents": "read",
+      "issues": "write",
+      "pull-requests": "write",
+      "security-events": "write",
+      "statuses": "write"
+    }
+  }
+}

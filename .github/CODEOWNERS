@@ -1,0 +1,5 @@
+# The paths whose code runs in CI ask for the owner's review; no review is
+# required (README.md, "Workflow policy").
+/.github/ @ma-lalonde
+/ci/ @ma-lalonde
+/scripts/ @ma-lalonde

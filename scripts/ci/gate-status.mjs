@@ -18,10 +18,11 @@ const DEPENDS = /^Depends-on: (catenahq\/[A-Za-z0-9._-]+)#([1-9][0-9]*)$/;
 
 export class ApiError extends Error {}
 
-export function gh(args) {
-  const r = spawnSync("gh", args, { encoding: "utf-8" });
+// The output of gh: a string, or a Buffer with encoding "buffer".
+export function gh(args, encoding = "utf-8") {
+  const r = spawnSync("gh", args, { encoding, maxBuffer: 256 * 1024 * 1024 });
   if (r.error || r.status !== 0) {
-    throw new ApiError(`gh ${args.slice(0, 2).join(" ")} failed: ${(r.error?.message ?? r.stderr).trim()}`);
+    throw new ApiError(`gh ${args.slice(0, 2).join(" ")} failed: ${(r.error?.message ?? String(r.stderr)).trim()}`);
   }
   return r.stdout;
 }
@@ -74,10 +75,10 @@ export function computeState({ repo, pr, sha, appTests }, warn = () => {}) {
   return waiting ? { state: "pending", description: waiting } : { state: "success", description: "no open dependency" };
 }
 
-export function post({ repo, sha }, { state, description }, env = process.env) {
+export function post({ repo, sha }, { state, description, context = CONTEXT }, env = process.env) {
   const args = [
     "api", "-X", "POST", `repos/${repo}/statuses/${sha}`,
-    "-f", `context=${CONTEXT}`,
+    "-f", `context=${context}`,
     "-f", `state=${state}`,
     "-f", `description=${description.slice(0, MAX_DESCRIPTION)}`,
   ];

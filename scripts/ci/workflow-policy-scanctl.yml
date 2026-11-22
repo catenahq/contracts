@@ -1,0 +1,12 @@
+# The scanctl configuration of the workflow policy: zizmor alone, its findings
+# at high and above blocking (README.md, "Workflow policy").
+tools:
+  osv-scanner: {enabled: false}
+  trivy: {enabled: false}
+  govulncheck: {enabled: false}
+  gosec: {enabled: false}
+  gitleaks: {enabled: false}
+  semgrep: {enabled: false}
+  guarddog: {enabled: false}
+  trivy-license: {enabled: false}
+  zizmor: {enabled: true, mode: block}

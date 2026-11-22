@@ -11,10 +11,12 @@ name: control
 # pull requests that depend on the one merged. With apps, dispatch sends the
 # app a pull request changes to the app tests after its ci run, and tag tags
 # the apps of a merged pull request on the push of its merge. With release,
-# release runs the release step a dispatch on main names. Every job loads
-# the CI code from this repository at the commit the caller pins
-# (job.workflow_sha); only dispatch checks out the caller's pull request, as
-# data its tools read, never run.
+# release runs the release step a dispatch on main names. policy judges the
+# workflows of a pull request and posts the commit status workflow policy.
+# Every job loads the CI code from this repository at the commit the caller
+# pins (job.workflow_sha); only dispatch checks out the caller's pull request,
+# as data its tools read, never run, and policy reads its files through the
+# API as data.
 
 on:
   workflow_call:
@@ -371,3 +373,115 @@ jobs:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/release.sh"
+
+  policy:
+    # The workflow policy of the pull request head (README.md, "Workflow
+    # policy"): its files are read through the API as data, never checked out
+    # or run.
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action)
+    runs-on: ${{ inputs.runner }}
+    # The policy App's client id and private key are secrets of the caller's
+    # environment workflow-policy.
+    environment:
+      name: workflow-policy
+      deployment: false
+    # A newer head of the pull request cancels the verdict of an older one.
+    concurrency:
+      group: policy-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read # the CI code
+    steps:
+      - name: The policy App
+        # Without the App the job posts nothing, so a caller runs before the
+        # App exists.
+        id: app
+        env:
+          CLIENT_ID: ${{ secrets.POLICY_APP_CLIENT_ID }}
+        run: |
+          if [ -z "$CLIENT_ID" ]; then
+            echo "::notice::environment workflow-policy holds no POLICY_APP_CLIENT_ID: no policy verdict is posted"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Mint a policy App token
+        # Reads the pull request, its files and the first-party commits of
+        # every repository the App is installed on, and posts the status.
+        if: steps.app.outputs.enabled == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.POLICY_APP_CLIENT_ID }}
+          private-key: ${{ secrets.POLICY_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+          permission-pull-requests: read
+          permission-statuses: write
+      - name: Check out the CI code
+        if: steps.app.outputs.enabled == 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - if: steps.app.outputs.enabled == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "26.13.1"
+      - name: Install the YAML parser
+        if: steps.app.outputs.enabled == 'true'
+        run: npm ci --prefix .catena-ci/scripts/ci --ignore-scripts --no-audit --no-fund
+      - name: Fetch the pull request's files
+        if: steps.app.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: >-
+          node .catena-ci/scripts/ci/workflow-policy.mjs fetch --repo "$REPO" --pr "$PR"
+          --head "$HEAD" --base "$BASE" --dir "$RUNNER_TEMP/policy"
+      - name: Build scanctl
+        if: steps.app.outputs.enabled == 'true'
+        uses: ./.catena-ci/.github/actions/scanctl
+      - name: zizmor
+        # scanctl with zizmor alone over the fetched head; its exit status
+        # goes to the verdict.
+        id: zizmor
+        if: steps.app.outputs.enabled == 'true'
+        env:
+          # zizmor's API-backed audits use this when present.
+          GH_TOKEN: ${{ github.token }}
+          ACTIONS_RUNTIME_TOKEN: ""
+        run: |
+          status=0
+          "$RUNNER_TEMP/bin/scanctl" run --config .catena-ci/scripts/ci/workflow-policy-scanctl.yml \
+            --out "$RUNNER_TEMP/policy/zizmor.sarif" --summary "$RUNNER_TEMP/policy/zizmor.md" \
+            "$RUNNER_TEMP/policy/pr" || status=$?
+          if [ -f "$RUNNER_TEMP/policy/zizmor.md" ]; then cat "$RUNNER_TEMP/policy/zizmor.md" >> "$GITHUB_STEP_SUMMARY"; fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Post the commit status workflow policy
+        id: verdict
+        if: steps.app.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          ZIZMOR: ${{ steps.zizmor.outputs.status }}
+        run: >-
+          node .catena-ci/scripts/ci/workflow-policy.mjs check --repo "$REPO" --sha "$HEAD"
+          --dir "$RUNNER_TEMP/policy" --zizmor "$ZIZMOR"
+      - name: Post the commit status workflow policy as error
+        # A step that failed before the verdict posted it: the status is error,
+        # never left to an earlier success.
+        if: failure() && steps.app-token.outcome == 'success' && steps.verdict.outputs.posted != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node .catena-ci/scripts/ci/workflow-policy.mjs error --repo "$REPO" --sha "$HEAD"

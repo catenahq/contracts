@@ -1,0 +1,16 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions: {}
+jobs:
+  ci:
+    uses: catenahq/contracts/.github/workflows/pr.yml@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # main
+    permissions:
+      contents: read
+      actions: read
+      statuses: write
+    with:
+      runner: catena-ci
+    secrets:
+      CATENA_EE_READ_TOKEN: ${{ secrets.CATENA_EE_READ_TOKEN }}

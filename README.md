@@ -613,7 +613,8 @@ jobs:
 the pull request's code: every job loads the CI code from contracts at
 `job.workflow_sha` under `.catena-ci/`, and only `dispatch` checks the pull
 request out, as data its tools read (see "App dispatch"). The workflow declares
-no secret: the CI App's are those of the caller's environment `ci`.
+no secret: the CI App's are those of the caller's environment `ci`, the
+policy App's those of its environment `workflow-policy`.
 
 | Input | Meaning |
 | --- | --- |
@@ -642,6 +643,9 @@ no secret: the CI App's are those of the caller's environment `ci`.
   of the pull request merged as the pushed commit (see "App tag").
 - `release`, with `release`, runs on a `workflow_dispatch` on `main` and runs
   the step it names (see "Release").
+- `policy` runs on `pull_request_target` of type `opened`, `synchronize` and
+  `reopened` and posts the commit status `workflow policy` of the head (see
+  "Workflow policy").
 
 `update` runs the updater with the token as `GH_TOKEN`:
 
@@ -813,6 +817,100 @@ failed read never counts as "no pull request open" or "no tag". Every value is
 validated before use; inputs reach the script through `env:` only.
 `scripts/ci/release.test.mjs` drives the script with stubs for `gh` and
 `sleep` on `PATH`.
+
+### Workflow policy
+
+The `policy` job of `control.yml` judges what a pull request makes CI run. It
+runs in the caller's environment `workflow-policy` (`deployment: false`),
+whose branch rule admits `main` and `release`, the bases a pull request
+targets, and which holds the policy App's `POLICY_APP_CLIENT_ID` and
+`POLICY_APP_PRIVATE_KEY`, with `contents: read`. When `POLICY_APP_CLIENT_ID` is
+empty it prints a notice and posts nothing. Otherwise it mints a policy App
+token for every repository the App is installed on (contents and pull requests
+read, statuses write), loads `scripts/ci/workflow-policy.mjs` from contracts at
+`job.workflow_sha`, and:
+
+- `fetch` writes every file under `.github/` and every file the pull request
+  changes, as they are at its head, into `$RUNNER_TEMP/policy/pr/`, the
+  workflows of the event's base commit into `$RUNNER_TEMP/policy/base/`, and the
+  changed paths into `changed.json`, through `gh api
+  repos/<r>/contents/<path>?ref=<sha>`: the pull request is never checked out
+  and nothing of it runs. A symbolic link under `.github/` is left out;
+  a pull request of 3000 files or more fails, past what the API lists. In the
+  copies of the workflows and actions every inline `# zizmor:` directive is
+  dropped, so the pull request suppresses no finding, and a `ci-control.yml`
+  of the caller shape (rule `ci-control`) gets `# zizmor:
+  ignore[dangerous-triggers]` on its `pull_request_target:` line: the caller
+  runs on that trigger by design;
+- scanctl, built by `.github/actions/scanctl`, runs zizmor alone over
+  `$RUNNER_TEMP/policy/pr/` (`scripts/ci/workflow-policy-scanctl.yml`), its
+  summary in the job summary;
+- `check` runs the rules below, writes the job summary and posts the commit
+  status `workflow policy` on the head with the App token: `success`, or
+  `failure` with the rules that failed. A step that fails before the verdict
+  is posted posts `error`.
+
+The rules, each named in the summary:
+
+- `yaml`: every workflow and action parses.
+- `pinned`: every `uses:` other than a `./` path is pinned by a 40-hex commit
+  with a version comment on its line (`# v7`, `# main`); a `docker://` image by
+  its digest.
+- `merged`: every first-party commit a `uses:` pins and every line of
+  `.github/catenahq.lock` is an ancestor of the repository's `main`: the
+  compare API reads `ahead` or `identical` for `compare/<sha>...main`. A failed
+  comparison fails the rule.
+- `secrets-inherit`: no job passes `secrets: inherit`.
+- `permissions`: every job has a `permissions:` block naming each scope, and
+  asks for no scope wider than its ceiling in `scripts/ci/workflow-policy.json`
+  under `<repository>:<workflow file>:<job>`. A job that asks for nothing needs
+  no ceiling.
+- `pull-request-target`: no job of a workflow run on `pull_request_target`, or
+  of a workflow of the tree it calls, checks out the pull request's head or
+  fetches it with git.
+- `secrets`: every `secrets.<NAME>` and every secret a job passes is in the
+  `secrets` of `scripts/ci/workflow-policy.json`, or is `GITHUB_TOKEN`; no secret
+  is named by an index expression.
+- `gate-needs`: in each base workflow with a `gate` job, `gate` and every job it
+  needs stay, stay in its `needs`, get no new `continue-on-error`, and keep
+  their `if:`.
+- `ci-gate`: only the job `ci` of `ci.yml`, calling contracts' `pr.yml`, can
+  yield the check name `ci / gate`; a job name with an expression can be
+  anything.
+- `ci-control`: a `.github/workflows/ci-control.yml` is the caller shape: one
+  job, calling `<owner>/contracts/.github/workflows/control.yml` at a 40-hex
+  commit, with no key but `uses`, `permissions` and `with` (no steps).
+- `zizmor`: scanctl passed.
+
+The summary also lists each changed path that runs in CI: under
+`.github/actions/`, `scripts/`, `ci/` or `build/`, and the lock files.
+
+`scripts/ci/workflow-policy.json` is read at the contracts commit the caller
+pins, so a pull request cannot widen its own ceilings. It holds `secrets`, the
+secret names, and `permissions`, the ceiling of each job. A missing ceiling
+fails with the key to add. When a caller's job needs more, add or widen its key
+in contracts first, then pin the caller at that commit.
+`node scripts/ci/workflow-policy.mjs --seed` prints the ceilings of the `ci.yml`
+and `ci-control.yml` templates above for each repository that calls these
+workflows, and those of `pr.yml` and `control.yml` with their secret names; the
+file holds all of them, and the entries added by hand.
+
+Every repository has a `.github/CODEOWNERS` covering the paths whose code runs
+in CI; it asks for the owner's review, and no review is required. Every
+repository:
+
+```
+/.github/ @ma-lalonde
+/ci/ @ma-lalonde
+```
+
+contracts adds `/scripts/ @ma-lalonde`, and catena-templates adds
+`/build/ @ma-lalonde` and `/lib/ @ma-lalonde`. `/.github/` covers
+`.github/actions/` and `.github/catenahq.lock`.
+
+`scripts/ci/workflow-policy.test.mjs` drives the script with a `gh` stub on
+`PATH` over the tree under `scripts/ci/fixtures/workflow-policy/`, which passes
+every rule, and over copies of it edited so that one rule fails.
 
 ## How to change a contract
 

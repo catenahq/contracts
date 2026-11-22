@@ -1,0 +1,13 @@
+name: ci-control
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+permissions: {}
+jobs:
+  control:
+    uses: catenahq/contracts/.github/workflows/control.yml@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # main
+    permissions:
+      contents: read
+      statuses: write
+    with:
+      runner: catena-ci
