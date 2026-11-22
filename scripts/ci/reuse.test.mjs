@@ -266,6 +266,17 @@ try {
   r = ok(planOf({ get: source(py1.name, { head: ALT, event: "schedule" }) }), "fetched head");
   assert.deepEqual(left(r), ["docs", "ee"], r.out);
 
+  // A push to the default branch keys its siblings at the lock, as the pull
+  // request did: it reuses the pull request's record of the same inputs, and
+  // its own record, of the same name, counts for a later pull request.
+  const PUSH = { GITHUB_EVENT_NAME: "push", GITHUB_HEAD_REF: "", GITHUB_BASE_REF: "", GITHUB_REF_NAME: "main" };
+  r = ok(planOf({ get: source(py1.name), env: PUSH }), "push reuses");
+  assert.deepEqual(left(r), ["docs", "ee"], r.out);
+  const pushed = recordOf(PYTHON, PUSH);
+  assert.deepEqual([pushed.name, pushed.record], [py1.name, "true"]);
+  r = ok(planOf({ get: source(py1.name, { event: "push", head: M1 }) }), "a push record");
+  assert.deepEqual(left(r), ["docs", "ee"], r.out);
+
   // Each refusal leaves python to run.
   const refusals = {
     expired: { expired: true },
@@ -273,7 +284,7 @@ try {
     "another repository's run": { repoId: 999 },
     "this run": { id: 200 },
     "another workflow file": { path: ".github/workflows/other.yml" },
-    "a push run": { event: "push" },
+    "a workflow_dispatch run": { event: "workflow_dispatch" },
     "pr.yml at another commit": { prSha: "d".repeat(40) },
     "another reusable workflow": { prYml: `catenahq/contracts/.github/workflows/other.yml@${W}` },
     "a failed job": { jobs: [["ci / check (python)", "failure"]] },

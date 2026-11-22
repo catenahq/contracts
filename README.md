@@ -257,6 +257,11 @@ GitHub refuses to start a run whose called jobs ask for a permission the caller
 does not grant, so the caller grants every permission a job of `pr.yml` asks
 for, a scan job's included, whether or not the scan runs.
 
+`pr.yml` declares three optional secrets: `CATENA_EE_READ_TOKEN`, which only
+`plan` reads (see "Private siblings"), and `DOCKERHUB_USERNAME` and
+`DOCKERHUB_TOKEN`, which only `scan-daily` reads (see "Scan"). The caller
+passes each under `secrets:` in the job that calls `pr.yml`.
+
 The input `runner` is the label of `plan`, `gate`, the scan jobs and every
 check that names no `runs-on`. These jobs run:
 
@@ -379,7 +384,7 @@ key's sha256>` holding the key, kept 30 days.
 (`resolve.sh`: the branch of the run's name, else the lock's commit) and lists
 the artifacts of each record name, newest first. A record counts when it is
 not expired; its run is of this repository and not a fork's, is not this run,
-ran `.github/workflows/ci.yml` on `pull_request` or `schedule`, and names
+ran `.github/workflows/ci.yml` on `pull_request`, `push` or `schedule`, and names
 `pr.yml` at this commit in its `referenced_workflows`; its job `ci / check
 (<name>)` (`ci / scan` for the scan) concluded success; and the inputs at the
 run's head commit, fetched by sha when the checkout lacks it, equal ours. Any
@@ -401,7 +406,18 @@ or the scan passed, an `upload-artifact` step uploads the file under the
 record name; a `run:` step holds no runtime token, so only that step uploads.
 
 A pull request whose base moved runs again only the checks whose inputs the
-base change touched. `scripts/ci/reuse.test.mjs` drives the script over
+base change touched. A push to the default branch looks records up and
+records its own: its siblings resolve to the lock's commits as the pull
+request's did and `workflow=` is the same pinned commit, so the push of a
+merged pull request reuses each record the pull request made of the same
+inputs, and a later pull request reuses the push's records.
+
+`.github/checks.yml`, `ci/run` and `.github/catenahq.lock` are in every key
+and are reviewed as code: checks.yml decides what each key covers, so a
+change that narrows a check's inputs lets the next runs reuse a record across
+a change to a file the check reads but no longer names.
+
+`scripts/ci/reuse.test.mjs` drives the script over
 scratch repositories with a `gh` stub on `PATH` and a `git` stub that answers
 `ls-remote` and runs git for the rest.
 
@@ -457,10 +473,12 @@ output. The action:
   summary into one comment it updates in place.
 
 `scan` grants `contents: read`, `security-events: write` and
-`pull-requests: write`. `scan-daily` adds `issues: write` and runs in the
-caller's environment `ci` (`deployment: false`): with `DOCKERHUB_USERNAME`
-and `DOCKERHUB_TOKEN` there, image pulls log in to Docker Hub. A failed
-`scan-daily` opens an issue labelled `scan`, or comments on the open one.
+`pull-requests: write`. `scan-daily` adds `issues: write`. When the caller
+passes the secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, its image pulls
+log in to Docker Hub; without them they pull anonymously and the log says so.
+`scan-daily` runs on `schedule`, which runs the default branch's code; `scan`
+pulls anonymously. A failed `scan-daily` opens an issue labelled `scan`, or
+comments on the open one.
 No scan job receives `CATENA_EE_READ_TOKEN`.
 
 `.github/actions/scanctl` builds scanctl into `$RUNNER_TEMP/bin/scanctl` with

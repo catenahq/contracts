@@ -93,8 +93,9 @@ const refuses = (extra, message, repo = "ci-runner") =>
     return true;
   });
 
-// pr.yml declares the one secret a check fetches a private sibling with.
-assert.deepEqual(declaredSecrets(PR_YML), ["CATENA_EE_READ_TOKEN"]);
+// pr.yml declares the secret a check fetches a private sibling with and the
+// Docker Hub login of the scheduled scan.
+assert.deepEqual(declaredSecrets(PR_YML), ["CATENA_EE_READ_TOKEN", "DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"]);
 assert.deepEqual(
   declaredSecrets("on:\n  workflow_call:\n    secrets:\n      CATENA_EE_READ_TOKEN:\n        required: false\n"),
   ["CATENA_EE_READ_TOKEN"],

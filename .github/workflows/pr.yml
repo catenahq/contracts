@@ -27,6 +27,12 @@ on:
       CATENA_EE_READ_TOKEN:
         description: Reads the private siblings a check names with token CATENA_EE_READ_TOKEN.
         required: false
+      DOCKERHUB_USERNAME:
+        description: Docker Hub user the scheduled scan logs in with to pull images.
+        required: false
+      DOCKERHUB_TOKEN:
+        description: Docker Hub access token of DOCKERHUB_USERNAME.
+        required: false
 
 permissions: {}
 
@@ -475,16 +481,13 @@ jobs:
           overwrite: true
 
   scan-daily:
-    # The scan of a scheduled run: image pulls log in to Docker Hub with the
-    # caller's environment ci when it holds DOCKERHUB_USERNAME and
-    # DOCKERHUB_TOKEN, and a failure opens the issue labelled scan, or comments
-    # on the open one.
+    # The scan of a scheduled run: image pulls log in to Docker Hub when the
+    # caller passes the secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN, else
+    # pull anonymously, and a failure opens the issue labelled scan, or
+    # comments on the open one. This is the only job that reads those secrets.
     needs: plan
     if: needs.plan.outputs.scan-run == 'true' && github.event_name == 'schedule'
     runs-on: ${{ inputs.runner }}
-    environment:
-      name: ci
-      deployment: false
     permissions:
       contents: read
       security-events: write # code-scanning upload (public repositories)
@@ -504,7 +507,7 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
-            echo "environment ci holds no Docker Hub login: images are pulled anonymously"
+            echo "no DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets passed: images are pulled anonymously"
             exit 0
           fi
           echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin

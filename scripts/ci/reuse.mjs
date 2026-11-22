@@ -25,8 +25,9 @@ const OWNER = "catenahq";
 // The caller's workflow file and the id of its job that calls pr.yml.
 const CALLER_WORKFLOW = ".github/workflows/ci.yml";
 const CALLER_JOB = "ci";
-// A schedule run is a source, never a reuser: plan skips the lookup on it.
-const SOURCE_EVENTS = ["pull_request", "schedule"];
+// The events whose runs' records count. A pull request or push run also looks
+// records up; a schedule run never does: plan skips the lookup on it.
+const SOURCE_EVENTS = ["pull_request", "push", "schedule"];
 // Files every check reads besides its inputs.
 const KEY_PATHS = [".github/checks.yml", ".github/catenahq.lock", "ci/run"];
 const SHA = /^[0-9a-f]{40}$/;
