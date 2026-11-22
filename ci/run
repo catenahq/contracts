@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Runs one check of this repository by its name in .github/checks.yml, the same
+# in CI and on a workstation: bash ci/run <name>.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+case "${1:-}" in
+  test)
+    # The brand smoke test, the JSON artifacts and the tests of every script,
+    # with the YAML parser the CI scripts load.
+    npm ci --prefix scripts/ci --ignore-scripts --no-audit --no-fund
+    npm test
+    ;;
+  *)
+    echo "ci/run: unknown check '${1:-}' (checks: test)" >&2
+    exit 2
+    ;;
+esac

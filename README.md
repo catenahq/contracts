@@ -324,11 +324,19 @@ scan:                        # absent: no scan
 
 A sibling is one of `catena-admin`, `catena-ce`, `catena-templates`,
 `contracts`, `docs` and `ops`, and needs a line in the caller's lock; `gates`
-needs the contracts line. A check sibling's `token` must name a secret `pr.yml`
-declares in `on.workflow_call.secrets`: `CATENA_EE_READ_TOKEN`. A scan sibling
-takes no `token`. A check's `go: <sibling>/go.mod` needs that sibling in the
+needs the contracts line. A check sibling's `token` is `CATENA_EE_READ_TOKEN`
+and no other secret, which `pr.yml` declares in `on.workflow_call.secrets`. A
+scan sibling takes no `token`. A check's `go: <sibling>/go.mod` needs that sibling in the
 check's `siblings`. A check with `go-cache: true` needs `tools.go`. No check may
 be named `gates`.
+
+This repository's own `ci.yml` calls `pr.yml` as `./.github/workflows/pr.yml`, on
+`pull_request`, on `push` to `main` and daily, with the runner `ubuntu-26.04`.
+Its `checks.yml` names `gates` with `duplication`, the check `test`
+(`bash ci/run test`: `npm test` over the brand smoke test, the JSON artifacts
+and the tests of every script) and `scan`. A repository is never its own
+sibling, so with `--repo contracts` the gates run from the caller's own tree:
+no contracts line in the lock and no contracts checkout.
 
 The parser prints one line of JSON: `include`, the matrix, and `scan`. Each
 entry carries `inputs` (`["."]` when the check names none, and for `gates`)
@@ -357,7 +365,7 @@ caller's repository name:
 It needs `npm ci --prefix scripts/ci` once (npm `yaml`, locked in
 `scripts/ci/`, outside the package consumers link).
 `scripts/ci/checks-matrix.test.mjs` runs it over the checks of ci-runner,
-catena-admin and ops, their scan settings, and each key it refuses.
+catena-admin, ops and contracts, their scan settings, and each key it refuses.
 
 ### Per-check reuse
 

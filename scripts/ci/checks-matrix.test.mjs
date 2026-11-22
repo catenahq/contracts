@@ -155,6 +155,26 @@ refuses({}, "checks.python.siblings.catena-admin.token: CATENA_EE_READ_TOKEN is 
   assert.deepEqual(audit.tools, { ...NO_TOOLS, uv: "0.13.9", go: "1.26.10" });
 }
 
+// contracts: its gates run from its own tree, so no contracts lock line and no
+// contracts checkout; the caller is never its own sibling.
+{
+  const own = buildMatrix({
+    checks: "gates: {duplication: true}\nchecks:\n  test:\n    tools: {node: 26.13.1}\nscan: {}\n",
+    lock: "", secrets: [], runner: "ubuntu-26.04", repo: "contracts",
+  });
+  const [gates, test] = own.include;
+  assert.deepEqual(gates.sib, NO_SIB);
+  assert.deepEqual(gates.gates, { "core-app-names": [], duplication: true });
+  assert.equal(gates["runs-on"], "ubuntu-26.04");
+  assert.deepEqual(test.tools, { ...NO_TOOLS, node: "26.13.1" });
+  assert.equal(own.scan.enabled, true);
+  refuses(
+    { checks: "gates: {}\nchecks:\n  test:\n    siblings: {contracts: {}}\n", lock: "catenahq/contracts 131ab7ee507055641860b5a8e90da5c47cfefacf # main\n", repo: "contracts" },
+    "checks.test.siblings.contracts: catenahq/contracts is this repository",
+    "contracts",
+  );
+}
+
 // Go from a declared sibling's go.mod, a bundle sibling's included; a sibling
 // the check does not declare is refused.
 {
@@ -213,7 +233,21 @@ refuses(ci("checks:\n  python:\n    siblings: {website: {}}\n"), "checks.python.
 refuses(ci("checks:\n  python:\n    siblings: {catena-ce: {}}\n"), "checks.python.siblings.catena-ce: catenahq/catena-ce has no line in .github/catenahq.lock");
 refuses(ci("checks:\n  python:\n    siblings: {contracts: {depth: 0}}\n"), "checks.python.siblings.contracts: unknown key 'depth'");
 refuses(ci("checks:\n  python:\n    siblings: {contracts: {fetch-depth: -1}}\n"), "checks.python.siblings.contracts.fetch-depth must be");
-refuses(ci("checks:\n  python:\n    siblings: {contracts: {token: GH_TOKEN}}\n"), "checks.python.siblings.contracts.token: GH_TOKEN is not a secret pr.yml declares");
+refuses(ci("checks:\n  python:\n    siblings: {contracts: {token: GH_TOKEN}}\n"), "checks.python.siblings.contracts.token: GH_TOKEN is not a sibling's token; the only one is CATENA_EE_READ_TOKEN");
+// A Docker Hub secret pr.yml declares is still not a sibling's token.
+for (const secret of ["DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"]) {
+  refuses(
+    { checks: `gates: {}\nchecks:\n  python:\n    siblings: {contracts: {token: ${secret}}}\n`, secrets: declaredSecrets(PR_YML) },
+    `checks.python.siblings.contracts.token: ${secret} is not a sibling's token; the only one is CATENA_EE_READ_TOKEN`,
+  );
+}
+assert.equal(
+  matrix("ci-runner", {
+    checks: "checks:\n  python:\n    siblings: {contracts: {token: CATENA_EE_READ_TOKEN}}\n",
+    secrets: declaredSecrets(PR_YML),
+  }).include[0].sib.contracts,
+  "bundle",
+);
 refuses(ci("checks:\n  gates: {}\n"), "checks.gates: the name gates belongs to the contracts gates");
 refuses(ci("checks:\n  Python: {}\n"), "checks.Python: a check name is");
 refuses(ci("checks:\n  python:\n    timeout-minutes: 0\n"), "checks.python.timeout-minutes must be 1 to 360");
