@@ -10,7 +10,8 @@ name: control
 # date with it, one at a time, and on a push recomputes the status of the open
 # pull requests that depend on the one merged. With apps, dispatch sends the
 # app a pull request changes to the app tests after its ci run, and tag tags
-# the apps of a merged pull request on the push of its merge. Every job loads
+# the apps of a merged pull request on the push of its merge. With release,
+# release runs the release step a dispatch on main names. Every job loads
 # the CI code from this repository at the commit the caller pins
 # (job.workflow_sha); only dispatch checks out the caller's pull request, as
 # data its tools read, never run.
@@ -31,7 +32,7 @@ on:
         type: boolean
         default: false
       step:
-        description: The release step a dispatch runs.
+        description: The release step a dispatch runs, cut, tag or merge-back.
         type: string
         default: ""
       version:
@@ -326,3 +327,47 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_TOKEN: ${{ steps.app-token.outputs.token }}
         run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/app-tag.sh"
+
+  release:
+    if: inputs.release && github.event_name == 'workflow_dispatch' && github.ref_name == 'main'
+    runs-on: ${{ inputs.runner }}
+    # The CI App's client id and private key are secrets of the caller's
+    # environment ci.
+    environment:
+      name: ci
+      deployment: false
+    # One release step per repository at a time, never cancelled.
+    concurrency:
+      group: release-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: read # the CI code
+    steps:
+      - name: Mint a CI App token that releases
+        # The App moves the release branch, writes the tag and opens the
+        # merge-back pull request. Writing a ref takes the workflows permission
+        # when the history it adds holds workflow changes.
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Check out the CI code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .catena-ci
+          persist-credentials: false
+      - name: Run the release step
+        env:
+          REPO: ${{ github.repository }}
+          STEP: ${{ inputs.step }}
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: bash "$GITHUB_WORKSPACE/.catena-ci/scripts/ci/release.sh"

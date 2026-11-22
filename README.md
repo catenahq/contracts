@@ -590,7 +590,7 @@ on:
   workflow_dispatch:        # release repositories only
     inputs:
       step: {type: choice, options: [cut, tag, merge-back], required: true}
-      version: {type: string, required: true}
+      version: {type: string, required: false}   # tag and merge-back
 permissions: {}
 jobs:
   control:
@@ -619,8 +619,8 @@ no secret: the CI App's are those of the caller's environment `ci`.
 | --- | --- |
 | `runner` | Required. The runner label of every job. |
 | `apps` | `true`: the `ci / gate` status and the updater also wait for the `app-tests` status, and `dispatch` and `tag` run. Default `false`. |
-| `release` | `true` for a repository released from its `release` branch. Default `false`; no job reads it. |
-| `step`, `version` | The release step and version of a `workflow_dispatch` run. Default empty; no job reads them. |
+| `release` | `true` for a repository released from its `release` branch: `release` runs. Default `false`. |
+| `step`, `version` | The release step (`cut`, `tag`, `merge-back`) and version (`vX.Y.Z`) of a `workflow_dispatch` run. Default empty. |
 
 - `depends` runs on `pull_request_target` and posts the commit status `ci /
   gate` of the pull request head with `gate-status.mjs` (`--app-tests` with
@@ -640,8 +640,10 @@ no secret: the CI App's are those of the caller's environment `ci`.
   app tests (see "App dispatch").
 - `tag`, with `apps`, runs on a `push` to the default branch and tags the apps
   of the pull request merged as the pushed commit (see "App tag").
+- `release`, with `release`, runs on a `workflow_dispatch` on `main` and runs
+  the step it names (see "Release").
 
-The job runs the updater with the token as `GH_TOKEN`:
+`update` runs the updater with the token as `GH_TOKEN`:
 
     node update.mjs --repo <owner/name> --event <name> [--sha <pushed commit>] [--apps]
 
@@ -765,6 +767,52 @@ is the one actor the tag ruleset lets create or move a `*/*` tag.
 Every merge passed `ci / gate`, which waits for `app-tests`, so a tag needs no
 other check. `scripts/ci/app-dispatch-tag.test.mjs` drives both scripts over
 scratch git repositories with stubs for `gh`, `uv` and `sleep` on `PATH`.
+
+### Release
+
+A repository released from its `release` branch passes `release: true` and
+starts each step by hand with its `ci-control.yml` `workflow_dispatch` on
+`main`, with the inputs `step` and `version`. A push to `release` runs the
+caller's release checks (its `ci.yml` lists `push: [release]`), fixes land on
+`release` by pull request, and the publish workflows run on the tag.
+
+The `release` job runs in the caller's environment `ci` (`deployment: false`),
+which holds the CI App's key for every job that mints its token, with
+`contents: read`. It mints a CI App token for the caller with contents, pull
+requests and workflows write (writing a ref takes the workflows permission
+when the history it adds holds workflow changes), so no step needs an
+administrator. One step runs per repository at a time and none is cancelled.
+`scripts/ci/release.sh` writes everything through the API, with no checkout of
+the caller:
+
+- `cut` moves `release` to the head of `main`: `PATCH
+  repos/<r>/git/refs/heads/release` with that commit and `force=false`, a
+  fast-forward only. It refuses while a pull request with a `merge-back/` head
+  is open, or while `release` holds commits `main` lacks (the comparison of
+  `release` with `main` is `behind` or `diverged`): the last release is not
+  merged back yet. A `release` identical to `main` writes nothing. It takes no
+  version and ignores one given.
+- `tag` refuses an empty `version` (the caller's input is optional, since
+  `cut` takes none) and one outside `^v[0-9]+\.[0-9]+\.[0-9]+$`, then writes
+  the annotated tag `<version>` on the head of `release`: `POST git/tags`, then
+  `POST git/refs` with the tag object. A tag of that name elsewhere refuses;
+  one already on the head of `release` writes nothing.
+- `merge-back` refuses an empty or bad version and a missing tag. When the tag's commit
+  holds commits `main` lacks, it makes the branch `merge-back/<version>` at
+  that commit, opens the pull request into `main`, waits up to a minute for
+  GitHub to compute whether it merges, and turns its auto-merge on with a
+  merge commit (`gh pr merge --auto --merge`). A conflict, which comes only
+  from a `main` that changed since the cut, fails the step with the branch
+  and the pull request left open: a person resolves it on the branch, and the
+  step run again takes the branch when it holds the tag's commit, and the open
+  pull request. Nothing is force-pushed.
+
+The next `cut` refuses until the merge-back has merged. A failed GitHub API
+call fails the step: a
+failed read never counts as "no pull request open" or "no tag". Every value is
+validated before use; inputs reach the script through `env:` only.
+`scripts/ci/release.test.mjs` drives the script with stubs for `gh` and
+`sleep` on `PATH`.
 
 ## How to change a contract
 
