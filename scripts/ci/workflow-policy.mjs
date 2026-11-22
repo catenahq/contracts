@@ -11,8 +11,7 @@
 // changed file at the head into <dir>/pr/, the workflows of the base into
 // <dir>/base/ and the changed paths into <dir>/changed.json, through the
 // contents API: nothing of the pull request is checked out or run. In the
-// copies of the workflows and actions it drops each inline zizmor directive,
-// and has a ci-control.yml of the caller shape ignore dangerous-triggers. check runs
+// copies of the workflows and actions it drops each inline zizmor directive. check runs
 // the rules over them with the exit status of the zizmor scan, prints the
 // summary (and appends it to GITHUB_STEP_SUMMARY), and posts the commit status
 // `workflow policy` on the head; error posts it as error. --seed writes the
@@ -26,12 +25,11 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renam
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse, parseDocument } from "yaml";
-import { ApiError, get, gh, post, readGet } from "./gate-status.mjs";
+import { ApiError, POLICY_FILE, get, gh, post, readGet } from "./gate-status.mjs";
 
+export { POLICY_FILE };
 export const CONTEXT = "workflow policy";
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, "..", "..");
-export const POLICY_FILE = join(HERE, "workflow-policy.json");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OWNER = "catenahq";
 // The repositories whose ci.yml and ci-control.yml call pr.yml and control.yml.
 export const REPOS = [
@@ -53,10 +51,8 @@ const ACTION = /^\.github\/(.+\/)?action\.ya?ml$/;
 const LOCK = ".github/catenahq.lock";
 const CI_CONTROL = ".github/workflows/ci-control.yml";
 const CALLER_KEYS = ["uses", "permissions", "with"];
-// An inline zizmor directive, and the trigger lines of a caller's
-// ci-control.yml that zizmor's dangerous-triggers reports, one finding each.
+// An inline zizmor directive.
 const ZIZMOR_DIRECTIVE = /#\s*zizmor\s*:/g;
-const CALLER_TRIGGERS = /^(\s*(?:pull_request_target|workflow_run):)[ \t]*(#.*)?$/gm;
 const LOCK_LINE = /^([\w.-]+\/[\w.-]+)\s+([0-9a-f]{40})(\s+#.*)?$/;
 const REF = /^([^/@\s]+)\/([^/@\s]+)(?:\/[^@\s]*)?@([^@\s]+)$/;
 const SECRET_REF = /\bsecrets\.([A-Za-z_][A-Za-z0-9_-]*)/g;
@@ -149,20 +145,12 @@ function download(repo, sha, paths, dir) {
 }
 
 // The head as zizmor reads it: no inline zizmor directive of the pull request
-// counts, and a ci-control.yml of the caller shape ignores dangerous-triggers
-// on its pull_request_target and workflow_run lines.
-function prepareZizmor(dir, repo) {
+// counts.
+function prepareZizmor(dir) {
   for (const path of listFiles(join(dir, ".github"), ".github")) {
     if (!WORKFLOW.test(path) && !ACTION.test(path)) continue;
     const file = join(dir, path);
-    let text = readFileSync(file, "utf-8").replace(ZIZMOR_DIRECTIVE, "# dropped-zizmor-directive:");
-    if (path === CI_CONTROL) {
-      const doc = parseDocument(text);
-      if (!doc.errors.length && !callerShape(doc.toJS(), repo).length) {
-        text = text.replace(CALLER_TRIGGERS, "$1 # zizmor: ignore[dangerous-triggers]");
-      }
-    }
-    writeFileSync(file, text);
+    writeFileSync(file, readFileSync(file, "utf-8").replace(ZIZMOR_DIRECTIVE, "# dropped-zizmor-directive:"));
   }
 }
 
@@ -172,7 +160,7 @@ export function fetchFiles({ repo, pr, head, base, dir }) {
   const paths = new Set(githubFiles(repo, head));
   for (const f of changed) if (f.status !== "removed") paths.add(f.path);
   download(repo, head, [...paths].sort(), join(dir, "pr"));
-  prepareZizmor(join(dir, "pr"), repo);
+  prepareZizmor(join(dir, "pr"));
   download(repo, base, githubFiles(repo, base).filter((p) => WORKFLOW.test(p)), join(dir, "base"));
   writeFileSync(join(dir, "changed.json"), `${JSON.stringify(changed)}\n`);
   return { files: paths.size, changed: changed.length };

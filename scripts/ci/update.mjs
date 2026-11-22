@@ -11,16 +11,21 @@
 // updated; otherwise the oldest candidate that is behind its base, whose head
 // passed the `ci / gate` check run, with --apps whose `app-tests` status is
 // success, and with no open Depends-on pull request, is updated with its base;
-// a failed update is reported and the next candidate is tried. On
-// workflow_run without --apps, --sha is the run's head, and each open pull
-// request of the repository with that head gets its `ci / gate` status
-// recomputed; on schedule, each open pull request of the repository does, so
-// a merged dependency reaches its dependents within the hour. Exit 1 on a
-// GitHub API error or a failed update, 2 on bad arguments (README.md,
-// "Control workflow").
+// a failed update, or a candidate that cannot be read, is reported and the
+// next candidate is tried. On workflow_run without --apps, --sha is the run's
+// head, and each open pull request of the repository with that head gets its
+// `ci / gate` status recomputed; on schedule, each open pull request of the
+// repository does, so a merged dependency reaches its dependents within the
+// hour. A Depends-on pull request that does not exist skips its candidate and
+// fails its status; a pull request whose status cannot be recomputed is
+// reported and the next one recomputed. Exit 1 on a GitHub API error, a failed
+// update or a failed read, once every pull request is done; 2 on bad
+// arguments (README.md, "Control workflow").
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ApiError, CONTEXT, appTestsState, computeState, gateRun, gh, parseDependsOn, post, unmetDependency } from "./gate-status.mjs";
+import {
+  ApiError, CONTEXT, DependencyNotFound, appTestsState, computeState, gateRun, gh, parseDependsOn, post, unmetDependency,
+} from "./gate-status.mjs";
 
 export const BASES = ["main", "release"];
 const EVENTS = ["push", "workflow_run", "schedule", "pull_request_target"];
@@ -47,7 +52,7 @@ function skipReason(repo, pr, apps) {
     const state = appTestsState(repo, pr.headRefOid);
     if (state !== "success") return `app-tests ${state ?? "not reported"}`;
   }
-  return unmetDependency(parseDependsOn(pr.body).deps);
+  return unmetDependency(parseDependsOn(pr.body).deps)?.description ?? null;
 }
 
 // Updates the oldest ready candidate of the base with its base; its number,
@@ -68,7 +73,18 @@ export function updateBase(repo, base, apps, log, fail) {
     }
   }
   for (const pr of candidates) {
-    const reason = skipReason(repo, pr, apps);
+    let reason;
+    try {
+      reason = skipReason(repo, pr, apps);
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      if (e instanceof DependencyNotFound) {
+        reason = `dependency not found: ${e.dependency}`;
+      } else {
+        fail(`${base}: #${pr.number} not judged: ${e.message}`);
+        reason = "not judged";
+      }
+    }
     if (reason) {
       log(`${base}: skip #${pr.number}: ${reason}`);
       continue;
@@ -87,18 +103,32 @@ export function updateBase(repo, base, apps, log, fail) {
   return null;
 }
 
+// A Depends-on pull request that does not exist is failure.
 function refresh(repo, number, sha, appTests, warn, log) {
-  const result = computeState({ repo, pr: number, sha, appTests }, warn);
+  let result;
+  try {
+    result = computeState({ repo, pr: number, sha, appTests }, warn);
+  } catch (e) {
+    if (!(e instanceof DependencyNotFound)) throw e;
+    result = { state: "failure", description: `dependency not found: ${e.dependency}` };
+  }
   post({ repo, sha }, result);
   log(`${repo}#${number}: ${CONTEXT} ${result.state}: ${result.description}`);
 }
 
 // The open pull requests of the repository, all or those whose head is sha.
 // All on schedule: a dependency merged since the last run, and a head whose
-// run's recompute a newer updater run replaced.
-export function refreshOpen(repo, sha, apps, warn, log) {
+// run's recompute a newer updater run replaced. One that fails goes to fail
+// and the next one is recomputed.
+export function refreshOpen(repo, sha, apps, warn, log, fail) {
   for (const pr of openPulls(repo)) {
-    if (sha === null || pr.headRefOid === sha) refresh(repo, pr.number, pr.headRefOid, apps, warn, log);
+    if (sha !== null && pr.headRefOid !== sha) continue;
+    try {
+      refresh(repo, pr.number, pr.headRefOid, apps, warn, log);
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      fail(`#${pr.number}: ${CONTEXT} not recomputed: ${e.message}`);
+    }
   }
 }
 
@@ -106,8 +136,8 @@ export function run({ repo, event, sha, apps }, warn, log, fail) {
   for (const base of BASES) updateBase(repo, base, apps, log, fail);
   // The status once the checks ended, for a pull request whose gate job posts
   // none (from a fork). With apps, dispatch posts it after the same run.
-  if (event === "workflow_run" && !apps) refreshOpen(repo, sha, apps, warn, log);
-  if (event === "schedule") refreshOpen(repo, null, apps, warn, log);
+  if (event === "workflow_run" && !apps) refreshOpen(repo, sha, apps, warn, log, fail);
+  if (event === "schedule") refreshOpen(repo, null, apps, warn, log, fail);
 }
 
 function parseArgs(argv) {

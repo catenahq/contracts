@@ -1,19 +1,22 @@
 // The repositories the read-only App token of a control job covers: the
-// caller's, and every catenahq repository that the lock files at a pull
-// request's base and head and its body's Depends-on lines name; with --open,
-// those the Depends-on lines of every open pull request of the caller name.
+// caller's, and every catenahq repository CI knows that the lock files at a
+// pull request's base and head and its body's Depends-on lines name; with
+// --locks-only, those the lock files name; with --open, those the Depends-on
+// lines of every open pull request of the caller name.
 //
 //   node read-scope.mjs --repo <owner/name> --pr <n> --base <sha> --head <sha>
+//   node read-scope.mjs --repo <owner/name> --locks-only --base <sha> --head <sha>
 //   node read-scope.mjs --repo <owner/name> --open
 //
-// GH_TOKEN reads the caller. Prints the names, deduplicated and
-// comma-separated as actions/create-github-app-token reads them, and writes
-// repositories=<names> to GITHUB_OUTPUT. More than MAX names fail. Exit 1 on a
-// GitHub API error or too many names, 2 on bad arguments (README.md, "Control
-// workflow").
+// GH_TOKEN reads the caller. A name CI does not know (knownRepos) is left out
+// with a warning: the App refuses to mint a token when one repository does not
+// resolve. Prints the names, deduplicated and comma-separated as
+// actions/create-github-app-token reads them, and writes repositories=<names>
+// to GITHUB_OUTPUT. More than MAX names fail. Exit 1 on a GitHub API error or
+// too many names, 2 on bad arguments (README.md, "Control workflow").
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ApiError, get, gh, parseDependsOn } from "./gate-status.mjs";
+import { ApiError, get, gh, knownRepos, parseDependsOn } from "./gate-status.mjs";
 
 export const OWNER = "catenahq";
 export const MAX = 15;
@@ -45,37 +48,47 @@ function lockAt(repo, sha) {
   }
 }
 
-// The caller's name first, then the others named, sorted, each once.
-export function scope(repo, names) {
+// The caller's name first, then the others named that are known, sorted, each
+// once; warn gets each name left out.
+export function scope(repo, names, known, warn) {
   const own = repo.split("/")[1].toLowerCase();
-  const all = [own, ...[...new Set(names)].filter((n) => n !== own).sort()];
+  const others = [...new Set(names)].filter((n) => n !== own).sort();
+  for (const n of others.filter((x) => !known.has(x))) warn(`${OWNER}/${n} is not a repository CI knows: left out of the read-only token`);
+  const all = [own, ...others.filter((n) => known.has(n))];
   if (all.length > MAX) throw new ScopeError(`${all.length} repositories to read, more than ${MAX}: ${all.join(", ")}`);
   return all;
 }
 
-export function readScope({ repo, pr, base, head, open }) {
+export function readScope({ repo, pr, base, head, open, locksOnly }, warn) {
+  const known = knownRepos();
   if (open) {
     const pulls = JSON.parse(gh(["pr", "list", "--repo", repo, "--state", "open", "--json", "body", "--limit", "1000"]));
-    return scope(repo, pulls.flatMap((p) => bodyRepos(p.body)));
+    return scope(repo, pulls.flatMap((p) => bodyRepos(p.body)), known, warn);
   }
-  const names = [...lockRepos(lockAt(repo, base)), ...lockRepos(lockAt(repo, head)), ...bodyRepos(get(`repos/${repo}/pulls/${pr}`).body)];
-  return scope(repo, names);
+  const names = [...lockRepos(lockAt(repo, base)), ...lockRepos(lockAt(repo, head))];
+  if (!locksOnly) names.push(...bodyRepos(get(`repos/${repo}/pulls/${pr}`).body));
+  return scope(repo, names, known, warn);
 }
 
 function parseArgs(argv) {
-  const opts = { open: false };
+  const opts = { open: false, locksOnly: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--open") opts.open = true;
+    else if (a === "--locks-only") opts.locksOnly = true;
     else if (["--repo", "--pr", "--base", "--head"].includes(a)) opts[a.slice(2)] = argv[++i];
     else throw new Error(`unknown argument '${a}'`);
   }
   if (!/^[\w.-]+\/[\w.-]+$/.test(opts.repo ?? "")) throw new Error("--repo needs owner/name");
   if (opts.open) {
-    if (opts.pr !== undefined || opts.base !== undefined || opts.head !== undefined) throw new Error("--open takes no --pr, --base or --head");
+    if (opts.locksOnly || opts.pr !== undefined || opts.base !== undefined || opts.head !== undefined) {
+      throw new Error("--open takes no --locks-only, --pr, --base or --head");
+    }
     return opts;
   }
-  if (!/^[1-9][0-9]*$/.test(opts.pr ?? "")) throw new Error("--pr needs a pull request number");
+  if (opts.locksOnly ? opts.pr !== undefined : !/^[1-9][0-9]*$/.test(opts.pr ?? "")) {
+    throw new Error(opts.locksOnly ? "--locks-only takes no --pr" : "--pr needs a pull request number");
+  }
   if (!SHA.test(opts.base ?? "") || !SHA.test(opts.head ?? "")) throw new Error("--base and --head need 40-hex commits");
   return opts;
 }
@@ -89,7 +102,7 @@ function main() {
     process.exit(2);
   }
   try {
-    const names = readScope(opts).join(",");
+    const names = readScope(opts, (m) => console.error(`::warning::read-scope: ${m}`)).join(",");
     console.log(names);
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `repositories=${names}\n`);
   } catch (e) {

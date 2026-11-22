@@ -13,13 +13,16 @@
 // the app-tests verdict of ops, whose token may not read a dependency's
 // repository. The pull request body names its dependencies, one per line, as
 // `Depends-on: catenahq/<repo>#<n>`; the status is pending until each named
-// pull request is merged. With --app-tests the newest `app-tests` status of the
+// pull request is merged, and failure when one names a repository CI does not
+// know. With --app-tests the newest `app-tests` status of the
 // sha must also be success; --apps-from asks for it when the repository's
 // .github/checks.yml at that commit declares apps, and --expect-apps, the
 // caller's own setting, must agree. The whole state is recomputed on every
 // call, so the newest post is right. Exit 1 on a GitHub API error or a
 // disagreement, 2 on bad arguments.
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { declaresApps } from "./checks-matrix.mjs";
 
@@ -31,8 +34,23 @@ const SHA = /^[0-9a-f]{40}$/;
 // Any App with checks write can create a check run of any name: only the one
 // GitHub Actions made for the gate job counts.
 const ACTIONS_APP = "github-actions";
+export const POLICY_FILE = join(dirname(fileURLToPath(import.meta.url)), "workflow-policy.json");
 
 export class ApiError extends Error {}
+
+// A Depends-on pull request the read-only token gets a 404 for: the token
+// covers its repository, so the pull request does not exist.
+export class DependencyNotFound extends ApiError {
+  constructor(dependency, message) {
+    super(message);
+    this.dependency = dependency;
+  }
+}
+
+// The catenahq repositories CI knows, lowercased: the repository part of each
+// ceiling key of workflow-policy.json.
+export const knownRepos = () =>
+  new Set(Object.keys(JSON.parse(readFileSync(POLICY_FILE, "utf-8")).permissions).map((key) => key.split(":")[0].toLowerCase()));
 
 // The output of gh: a string, or a Buffer with encoding "buffer". token
 // replaces GH_TOKEN.
@@ -65,21 +83,28 @@ export function parseDependsOn(body) {
   return { deps, malformed };
 }
 
-// pending with the reason of the first dependency not merged, else null.
-// With unreadable, a dependency that cannot be read is that reason instead of
-// an error: the gate job holds no token for other repositories.
+// The verdict of the dependencies while one is not merged, else null: failure
+// when one names a repository CI does not know, else pending with the reason
+// of the first one not merged. With unreadable, a dependency that cannot be
+// read is pending with that reason instead of an error: the gate job holds no
+// token for other repositories. Without it, a 404 throws DependencyNotFound.
 export function unmetDependency(deps, unreadable = null) {
+  const known = knownRepos();
+  const unknown = deps.find((d) => !known.has(d.repo.split("/")[1].toLowerCase()));
+  if (unknown) return { state: "failure", description: `unknown repository: ${unknown.repo}#${unknown.number}` };
   for (const { repo, number } of deps) {
+    const name = `${repo}#${number}`;
     let pr;
     try {
       pr = readGet(`repos/${repo}/pulls/${number}`);
     } catch (e) {
-      if (unreadable === null || !(e instanceof ApiError)) throw e;
-      return unreadable;
+      if (!(e instanceof ApiError)) throw e;
+      if (unreadable !== null) return { state: "pending", description: unreadable };
+      if (e.message.includes("(HTTP 404)")) throw new DependencyNotFound(name, e.message);
+      throw e;
     }
     if (pr.merged_at) continue;
-    const name = `${repo}#${number}`;
-    return pr.state === "closed" ? `${name} closed without merging` : `waiting for ${name}`;
+    return { state: "pending", description: pr.state === "closed" ? `${name} closed without merging` : `waiting for ${name}` };
   }
   return null;
 }
@@ -135,8 +160,8 @@ export function computeState({ repo, pr, sha, appTests, gateJob = false, pendUnr
   if (tests === "failure" || tests === "error") return { state: "failure", description: "app-tests failed" };
   const checks = gateJob ? null : checksState(repo, sha);
   if (checks?.state === "failure") return checks;
-  const waiting = unmetDependency(deps, gateJob || pendUnreadable ? "waiting for the control run" : null);
-  if (waiting) return { state: "pending", description: waiting };
+  const unmet = unmetDependency(deps, gateJob || pendUnreadable ? "waiting for the control run" : null);
+  if (unmet) return unmet;
   if (checks) return checks;
   if (!appTests) return { state: "success", description: "no open dependency" };
   if (tests !== "success") return { state: "pending", description: "waiting for app-tests" };

@@ -7,6 +7,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MAX, ScopeError, scope } from "./read-scope.mjs";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "read-scope.mjs");
 const work = mkdtempSync(join(tmpdir(), "catena-read-scope-test-"));
@@ -56,37 +57,49 @@ const forPull = ["--pr", "7", "--base", BASE, "--head", HEAD];
 
 try {
   // The caller first, then each catenahq repository the base and head locks
-  // and the body name, once; another owner and a malformed line are left out.
+  // and the body name, once; another owner and a malformed line are left out,
+  // and so is a repository CI does not know (none of workflow-policy.json),
+  // with a warning: the App mints no token when one name does not resolve.
   const state = {
     raw: {
-      [lock(BASE)]: [line("catenahq/ops"), line("other/ops"), "# comment", "catenahq/docs main", ""].join("\n"),
+      [lock(BASE)]: [line("catenahq/ops"), line("other/ops"), "# comment", "catenahq/docs main", line("catenahq/gone"), ""].join("\n"),
       [lock(HEAD)]: [line("CatenaHQ/Catena-Admin"), line("catenahq/ops"), line("catenahq/demo")].join("\n"),
     },
-    get: { [`repos/${REPO}/pulls/7`]: { body: "Depends-on: catenahq/website#3\nDepends-on: catenahq/ops#9\nDepends-on: other/x#1" } },
+    get: {
+      [`repos/${REPO}/pulls/7`]: { body: "Depends-on: catenahq/website#3\nDepends-on: catenahq/ops#9\nDepends-on: other/x#1\nDepends-on: catenahq/nope#1" },
+    },
   };
   let r = exec(forPull, state);
   assert.equal(r.status, 0, r.err);
   assert.equal(r.out, "demo,catena-admin,ops,website");
   assert.equal(r.output, "repositories=demo,catena-admin,ops,website\n");
+  for (const name of ["gone", "nope"]) {
+    assert.ok(r.err.includes(`::warning::read-scope: catenahq/${name} is not a repository CI knows`), r.err);
+  }
+
+  // --locks-only: the lock files alone; the body is never read.
+  r = exec(["--locks-only", "--base", BASE, "--head", HEAD], { raw: state.raw });
+  assert.equal(r.status, 0, r.err);
+  assert.equal(r.out, "demo,catena-admin,ops");
 
   // No lock at either commit (404) and no Depends-on: the caller alone.
   r = exec(forPull, { get: { [`repos/${REPO}/pulls/7`]: { body: null } } });
   assert.equal(r.status, 0, r.err);
   assert.equal(r.out, "demo");
 
-  // --open: the Depends-on lines of every open pull request.
-  r = exec(["--open"], { open: [{ body: "Depends-on: catenahq/ops#1" }, { body: "" }, { body: "Depends-on: catenahq/docs#2\nDepends-on: catenahq/ops#3" }] });
+  // --open: the Depends-on lines of every open pull request, unknown names left out.
+  r = exec(["--open"], {
+    open: [{ body: "Depends-on: catenahq/ops#1" }, { body: "" }, { body: "Depends-on: catenahq/docs#2\nDepends-on: catenahq/ops#3\nDepends-on: catenahq/nope#1" }],
+  });
   assert.equal(r.status, 0, r.err);
   assert.equal(r.out, "demo,docs,ops");
+  assert.ok(r.err.includes("::warning::read-scope: catenahq/nope is not a repository CI knows"), r.err);
 
-  // More than 15 repositories fail, and write nothing.
-  const many = Array.from({ length: 15 }, (_, i) => `Depends-on: catenahq/r${i}#1`).join("\n");
-  r = exec(["--open"], { open: [{ body: many }] });
-  assert.equal(r.status, 1, r.err);
-  assert.ok(r.err.includes("16 repositories to read, more than 15"), r.err);
-  assert.equal(r.output, "");
-  r = exec(["--open"], { open: [{ body: many.split("\n").slice(1).join("\n") }] });
-  assert.equal(r.status, 0, "15 is the cap");
+  // More than 15 known repositories fail.
+  const names = Array.from({ length: MAX }, (_, i) => `r${i}`);
+  const known = new Set(names);
+  assert.throws(() => scope(REPO, names, known, () => {}), (e) => e instanceof ScopeError && e.message.startsWith("16 repositories to read, more than 15"));
+  assert.equal(scope(REPO, names.slice(1), known, () => {}).length, MAX, "15 is the cap");
 
   // A failed read fails: an unread lock is never "no repository".
   for (const fail of ["catenahq.lock?ref=" + HEAD, "pulls/7"]) {
@@ -97,7 +110,10 @@ try {
   }
 
   // Bad arguments exit 2.
-  for (const args of [[], ["--pr", "7"], ["--pr", "7", "--base", BASE, "--head", "x"], ["--open", "--pr", "7"], ["--bogus"]]) {
+  for (const args of [
+    [], ["--pr", "7"], ["--pr", "7", "--base", BASE, "--head", "x"], ["--open", "--pr", "7"], ["--open", "--locks-only"],
+    ["--locks-only", "--pr", "7", "--base", BASE, "--head", HEAD], ["--locks-only", "--base", BASE], ["--bogus"],
+  ]) {
     assert.equal(exec(args).status, 2, `${args}`);
   }
   const noRepo = spawnSync(process.execPath, [SCRIPT, "--open"], { encoding: "utf-8" });
