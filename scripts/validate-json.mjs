@@ -141,15 +141,20 @@ const isUnder = (p, root) => p.startsWith(`${root}/`);
 function validateHostLayoutJson(file, data) {
   const groups = ["roots", "data_folders", "files"];
   const lists = ["machine_trees", "data_trees", "backup_set"];
+  const exactKeys = (where, obj, keys) => {
+    const got = Object.keys(obj).sort().join(", ");
+    const want = [...keys].sort().join(", ");
+    return got === want || fail(file, `${where} keys must be exactly ${want}, got: ${got}`);
+  };
+  if (!exactKeys("top-level", data, [...groups, ...lists])) return;
   for (const key of groups) {
     if (!data[key] || typeof data[key] !== "object" || Array.isArray(data[key])) return fail(file, `${key} must be an object`);
   }
   for (const key of lists) {
     if (!Array.isArray(data[key])) return fail(file, `${key} must be an array`);
   }
-  for (const key of ["data", "config", "state"]) {
-    if (!(key in data.roots)) return fail(file, `roots missing ${key}`);
-  }
+  if (!exactKeys("roots", data.roots, ["data", "config", "state"])) return;
+  if (!exactKeys("data_folders", data.data_folders, ["apps", "compose", "backup_staging", "docker", "volumes"])) return;
   const before = failures;
   const named = [];
   for (const key of groups) for (const [name, p] of Object.entries(data[key])) named.push([`${key}.${name}`, p]);
@@ -180,7 +185,7 @@ function validateHostLayoutJson(file, data) {
   }
   if (!data.machine_trees.includes(dataRoot)) fail(file, `machine_trees must hold roots.data ${dataRoot}`);
   for (const p of data.data_trees) {
-    if (!data.machine_trees.some((t) => p === t || isUnder(p, t))) fail(file, `data_trees: ${p} is not under a machine_trees entry`);
+    if (!data.machine_trees.some((t) => isUnder(p, t))) fail(file, `data_trees: ${p} is not strictly under a machine_trees entry`);
   }
   const folders = Object.values(data.data_folders);
   for (const p of data.backup_set) {

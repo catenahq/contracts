@@ -36,9 +36,13 @@ const bad = [
   ["a data folder outside the data root", (l) => (l.data_folders.apps = "/srv/other/apps"), "data_folders.apps: /srv/other/apps is not under roots.data"],
   ["a file outside the config and state roots", (l) => (l.files.release = "/opt/catena/release.json"), "files.release: /opt/catena/release.json is not under roots.config"],
   ["a data root missing from the machine trees", (l) => (l.machine_trees = l.machine_trees.filter((t) => t !== "/srv/catena")), "machine_trees must hold roots.data"],
-  ["a data tree outside the machine trees", (l) => l.data_trees.push("/opt/data"), "data_trees: /opt/data is not under a machine_trees entry"],
+  ["a data tree outside the machine trees", (l) => l.data_trees.push("/opt/data"), "data_trees: /opt/data is not strictly under a machine_trees entry"],
+  ["a data tree equal to a machine tree", (l) => l.data_trees.push("/srv/catena"), "data_trees: /srv/catena is not strictly under a machine_trees entry"],
   ["a backup path under the data root that is no data folder", (l) => l.backup_set.push("/srv/catena/extra"), "backup_set: /srv/catena/extra is under roots.data and is not one of data_folders"],
-  ["a missing key", (l) => delete l.roots.state, "roots missing state"],
+  ["a missing roots key", (l) => delete l.roots.state, "roots keys must be exactly"],
+  ["an unknown roots key", (l) => (l.roots.bin = "/usr/local/bin"), "roots keys must be exactly"],
+  ["a missing data folder", (l) => delete l.data_folders.docker, "data_folders keys must be exactly"],
+  ["an unknown top-level key", (l) => (l.extra = []), "top-level keys must be exactly"],
 ];
 
 try {

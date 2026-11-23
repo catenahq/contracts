@@ -39,11 +39,12 @@ consumer reads it at run time, because the admin image and the hosts have no con
 
 `node scripts/validate-json.mjs` checks the shape:
 
+- the top level, `roots` and `data_folders` hold exactly the keys of `schema.json`;
 - every path is absolute and clean (no trailing slash, no `.` or `..`, no empty segment);
 - no value appears twice among `roots`, `data_folders` and `files`, nor twice within a list;
 - every `data_folders` entry is under `roots.data`;
 - every `files` entry is under `roots.config` or `roots.state`;
-- `roots.data` is in `machine_trees`, and every `data_trees` entry is under a `machine_trees` entry;
+- `roots.data` is in `machine_trees`, and every `data_trees` entry is strictly under a `machine_trees` entry;
 - every `backup_set` entry at or under `roots.data` is one of the `data_folders`. Entries outside `roots.data` (the
   host's `/etc`, `/var/lib/dpkg` and the like) are only checked for the first two rules.
 
