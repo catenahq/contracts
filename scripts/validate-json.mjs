@@ -2,21 +2,21 @@
 // validate-json.mjs
 //
 // Walks every .json under the contract directories (brand/, pricing/,
-// legal/, default-apps/) and confirms each one parses. Also does the minimum
+// legal/, default-apps/, host-layout/) and confirms each one parses. Also does the minimum
 // shape check per file documented in the per-directory READMEs.
 //
 // It catches malformed JSON and a missing or ill-typed required key,
 // with zero deps.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { extname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 
-const CONTRACT_DIRS = ["brand", "pricing", "legal", "default-apps"];
+const CONTRACT_DIRS = ["brand", "pricing", "legal", "default-apps", "host-layout"];
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -136,6 +136,61 @@ function validateWiringJson(file, data) {
   if (failures === before) ok(file);
 }
 
+const isUnder = (p, root) => p.startsWith(`${root}/`);
+
+function validateHostLayoutJson(file, data) {
+  const groups = ["roots", "data_folders", "files"];
+  const lists = ["machine_trees", "data_trees", "backup_set"];
+  for (const key of groups) {
+    if (!data[key] || typeof data[key] !== "object" || Array.isArray(data[key])) return fail(file, `${key} must be an object`);
+  }
+  for (const key of lists) {
+    if (!Array.isArray(data[key])) return fail(file, `${key} must be an array`);
+  }
+  for (const key of ["data", "config", "state"]) {
+    if (!(key in data.roots)) return fail(file, `roots missing ${key}`);
+  }
+  const before = failures;
+  const named = [];
+  for (const key of groups) for (const [name, p] of Object.entries(data[key])) named.push([`${key}.${name}`, p]);
+  for (const key of lists) data[key].forEach((p, i) => named.push([`${key}[${i}]`, p]));
+  for (const [where, p] of named) {
+    if (typeof p !== "string" || !p.startsWith("/") || p === "/" || p.endsWith("/") || posix.normalize(p) !== p) {
+      fail(file, `${where}: must be an absolute, clean path below /, got: ${JSON.stringify(p)}`);
+    }
+  }
+  if (failures > before) return;
+
+  const seen = new Map();
+  for (const [where, p] of named.filter(([w]) => groups.some((g) => w.startsWith(`${g}.`)))) {
+    if (seen.has(p)) fail(file, `${where}: ${p} is also ${seen.get(p)}`);
+    else seen.set(p, where);
+  }
+  for (const key of lists) {
+    const dup = data[key].find((p, i) => data[key].indexOf(p) !== i);
+    if (dup !== undefined) fail(file, `${key}: ${dup} appears twice`);
+  }
+
+  const { data: dataRoot, config, state } = data.roots;
+  for (const [name, p] of Object.entries(data.data_folders)) {
+    if (!isUnder(p, dataRoot)) fail(file, `data_folders.${name}: ${p} is not under roots.data ${dataRoot}`);
+  }
+  for (const [name, p] of Object.entries(data.files)) {
+    if (!isUnder(p, config) && !isUnder(p, state)) fail(file, `files.${name}: ${p} is not under roots.config ${config} or roots.state ${state}`);
+  }
+  if (!data.machine_trees.includes(dataRoot)) fail(file, `machine_trees must hold roots.data ${dataRoot}`);
+  for (const p of data.data_trees) {
+    if (!data.machine_trees.some((t) => p === t || isUnder(p, t))) fail(file, `data_trees: ${p} is not under a machine_trees entry`);
+  }
+  const folders = Object.values(data.data_folders);
+  for (const p of data.backup_set) {
+    if ((p === dataRoot || isUnder(p, dataRoot)) && !folders.includes(p)) {
+      fail(file, `backup_set: ${p} is under roots.data and is not one of data_folders`);
+    }
+  }
+  if (failures === before) ok(file);
+}
+
 console.log("validate-json:");
 for (const dir of CONTRACT_DIRS) {
   for (const file of walk(join(ROOT, dir))) {
@@ -151,6 +206,7 @@ for (const dir of CONTRACT_DIRS) {
     else if (rel === "pricing/checkout.json") validateCheckoutJson(rel, parsed);
     else if (rel === "legal/msa.json") validateMsaJson(rel, parsed);
     else if (rel === "default-apps/wiring.json") validateWiringJson(rel, parsed);
+    else if (rel === "host-layout/layout.json") validateHostLayoutJson(rel, parsed);
     else ok(rel);
   }
 }

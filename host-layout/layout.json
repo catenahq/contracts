@@ -1,0 +1,60 @@
+{
+  "roots": {
+    "data": "/srv/catena",
+    "config": "/etc/catena",
+    "state": "/var/lib/catena"
+  },
+  "data_folders": {
+    "apps": "/srv/catena/apps",
+    "compose": "/srv/catena/compose",
+    "backup_staging": "/srv/catena/backup-staging",
+    "docker": "/srv/catena/docker",
+    "volumes": "/srv/catena/docker/volumes"
+  },
+  "files": {
+    "config_store": "/etc/catena/config.json",
+    "stacks": "/etc/catena/stacks",
+    "daily_env": "/etc/catena/daily.env",
+    "stack_update_env": "/etc/catena/stack-update.env",
+    "backup_env": "/etc/catena/backup.env",
+    "managed_services": "/etc/catena/managed-services.json",
+    "admin_state": "/var/lib/catena/admin",
+    "prebump": "/var/lib/catena/prebump",
+    "managed_versions": "/var/lib/catena/managed-versions.json",
+    "managed_versions_failed": "/var/lib/catena/managed-versions.failed.json",
+    "release": "/var/lib/catena/release.json",
+    "payload_manifest": "/var/lib/catena/payload-manifest.json",
+    "converge_manifest": "/var/lib/catena/converge-manifest.json",
+    "maintenance_log": "/var/lib/catena/maintenance-log.json",
+    "restic_check": "/var/lib/catena/restic-check.json",
+    "verify_hot": "/var/lib/catena/verify-hot.json",
+    "backup_stats": "/var/lib/catena/backup-stats.json",
+    "preflight": "/var/lib/catena/preflight.json",
+    "selfupdate_state": "/var/lib/catena/selfupdate.state",
+    "stack_update_log": "/var/lib/catena/stack-update.log",
+    "engine_upgrade_state": "/var/lib/catena/engine-upgrade.state",
+    "restic_home": "/var/lib/catena/restic-home",
+    "restic_cache": "/var/lib/catena/restic-cache"
+  },
+  "machine_trees": [
+    "/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/libx32",
+    "/proc", "/root", "/run", "/sbin", "/sys", "/usr",
+    "/var/lib", "/var/run", "/var/spool", "/var/log",
+    "/srv/catena"
+  ],
+  "data_trees": ["/srv/catena/apps"],
+  "backup_set": [
+    "/srv/catena/apps",
+    "/srv/catena/compose",
+    "/srv/catena/backup-staging",
+    "/srv/catena/docker/volumes",
+    "/etc/ssh",
+    "/etc/ufw",
+    "/etc/fstab",
+    "/etc",
+    "/var/lib/dpkg",
+    "/usr/local/bin",
+    "/usr/local/lib/catena",
+    "/var/lib/catena"
+  ]
+}
