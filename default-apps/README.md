@@ -1,6 +1,6 @@
 # default-apps
 
-The wiring of the apps Catena installs by default (Gatus, Healthchecks, Beszel): one file that catena-ce, catena-admin,
+The wiring of the apps Catena installs by default (Gatus, Beszel): one file that catena-ce, catena-admin,
 catena-templates and ops read, so the stack names, networks, ports, volumes and capabilities agree everywhere.
 
 ## Files
