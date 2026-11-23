@@ -129,7 +129,7 @@ quantitative uptime target).
 
 A Catena Business Client may request a monthly uptime report through
 the Operator's helpdesk. The report is generated from the Suite's own
-monitoring (Gatus and Healthchecks, on the Client's server) and is
+monitoring (Gatus, Beszel and Catena's alerts, on the Client's server) and is
 provided as a PDF or CSV.
 
 ## 9. Out-of-scope
