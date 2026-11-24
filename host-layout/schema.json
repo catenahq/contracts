@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Host layout",
+  "type": "object",
+  "required": ["roots", "data_folders", "files", "machine_trees", "data_trees", "backup_set"],
+  "additionalProperties": false,
+  "properties": {
+    "roots": {
+      "type": "object",
+      "required": ["data", "config", "state"],
+      "additionalProperties": false,
+      "properties": {
+        "data": { "$ref": "#/$defs/path" },
+        "config": { "$ref": "#/$defs/path" },
+        "state": { "$ref": "#/$defs/path" }
+      }
+    },
+    "data_folders": {
+      "type": "object",
+      "required": ["apps", "compose", "backup_staging", "docker", "volumes"],
+      "additionalProperties": false,
+      "properties": {
+        "apps": { "$ref": "#/$defs/path" },
+        "compose": { "$ref": "#/$defs/path" },
+        "backup_staging": { "$ref": "#/$defs/path" },
+        "docker": { "$ref": "#/$defs/path" },
+        "volumes": { "$ref": "#/$defs/path" }
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/path" }
+    },
+    "machine_trees": { "$ref": "#/$defs/paths" },
+    "data_trees": { "$ref": "#/$defs/paths" },
+    "backup_set": { "$ref": "#/$defs/paths" }
+  },
+  "$defs": {
+    "path": { "type": "string", "pattern": "^(/[^/]+)+$" },
+    "paths": { "type": "array", "items": { "$ref": "#/$defs/path" } }
+  }
+}
