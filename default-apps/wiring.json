@@ -1,35 +1,10 @@
 {
   "reserved_capabilities": {
-    "beszel": { "provider": "beszel", "readers": ["gatus"] },
+    "beszel": { "provider": "beszel", "readers": [] },
     "beszelgate": { "provider": "beszel", "readers": [] }
   },
-  "alert_intake_sources": { "status": "gatus", "resources": "beszel" },
+  "alert_intake_sources": { "resources": "beszel" },
   "apps": {
-    "gatus": {
-      "stack": "catena-gatus",
-      "services": {
-        "app": {
-          "networks": {
-            "catena-network": ["gatus"],
-            "catena-alerts": [],
-            "catena-beszel": []
-          },
-          "ports": [{ "published": 18080, "target": 8080 }]
-        },
-        "base": {}
-      },
-      "volumes": {
-        "gatus-data": "catena-gatus_gatus-data",
-        "config": "catena-gatus_config"
-      },
-      "sqlite": [{ "volume": "gatus-data", "file": "gatus.db" }],
-      "config_volume": "config",
-      "env_core_writes": ["STATUS_HOST"],
-      "env_declared": ["SUBDOMAIN", "ALERT_URL", "ALERT_TOKEN", "HUB_URL", "UI_TITLE", "UPDATE_LEVEL"],
-      "secrets": ["alert_intake_token_status"],
-      "provides": {},
-      "reads": ["beszel"]
-    },
     "beszel": {
       "stack": "catena-beszel",
       "services": {

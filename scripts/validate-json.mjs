@@ -97,9 +97,6 @@ function validateWiringJson(file, data) {
     for (const s of app.sqlite ?? []) {
       if (!(s.volume in (app.volumes ?? {}))) fail(file, `${id}: sqlite volume ${s.volume} is not a volume key`);
     }
-    if (app.config_volume !== undefined && !(app.config_volume in (app.volumes ?? {}))) {
-      fail(file, `${id}: config_volume ${app.config_volume} is not a volume key`);
-    }
     for (const [svc, def] of Object.entries(app.services ?? {})) {
       for (const p of def.ports ?? []) {
         if (!Number.isInteger(p.published) || !Number.isInteger(p.target)) {
