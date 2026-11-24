@@ -28,7 +28,6 @@ An app entry:
 | `stack` | Swarm stack name, `catena-<id>`. |
 | `services` | Service name -> `networks` (network -> aliases), `ports` (`published`, `target`), `host_network`, `docker_socket`. |
 | `volumes` | Volume key (as the app's compose names it) -> volume name `<stack>_<key>`. |
-| `sqlite` | SQLite files to back up: `volume` (a key of `volumes`) and `file`. |
 | `env_core_writes` | Keys catena-ce writes into the app's `.env` with `setenv`; the app's block never declares them. |
 | `env_declared` | Every key the block declares: settings, managed and generated. Core writes none of them. |
 | `secrets` | Store secrets the block lists. |
@@ -47,7 +46,7 @@ Each consumer's tests read this file as a sibling checkout:
 ## Changing it
 
 `node scripts/validate-json.mjs` checks the shape: every app has `stack` `catena-<id>`, every volume name is
-`<stack>_<key>`, every port pair is two integers, every `sqlite` volume is a volume key, and every provider and reader of
+`<stack>_<key>`, every port pair is two integers, and every provider and reader of
 a reserved capability is an app of the file and agrees with that app's `provides` and `reads`, and every app named in
 `alert_intake_sources` is an app of the file that lists the source's token in its `secrets`.
 

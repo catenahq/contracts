@@ -56,7 +56,6 @@
         "stack",
         "services",
         "volumes",
-        "sqlite",
         "env_core_writes",
         "env_declared",
         "secrets",
@@ -73,18 +72,6 @@
         "volumes": {
           "type": "object",
           "additionalProperties": { "type": "string" }
-        },
-        "sqlite": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["volume", "file"],
-            "additionalProperties": false,
-            "properties": {
-              "volume": { "type": "string" },
-              "file": { "type": "string" }
-            }
-          }
         },
         "env_core_writes": { "$ref": "#/$defs/strings" },
         "env_declared": { "$ref": "#/$defs/strings" },

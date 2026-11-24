@@ -94,9 +94,6 @@ function validateWiringJson(file, data) {
     for (const [key, name] of Object.entries(app.volumes ?? {})) {
       if (name !== `${app.stack}_${key}`) fail(file, `${id}: volume ${key} must be named ${app.stack}_${key}, got: ${name}`);
     }
-    for (const s of app.sqlite ?? []) {
-      if (!(s.volume in (app.volumes ?? {}))) fail(file, `${id}: sqlite volume ${s.volume} is not a volume key`);
-    }
     for (const [svc, def] of Object.entries(app.services ?? {})) {
       for (const p of def.ports ?? []) {
         if (!Number.isInteger(p.published) || !Number.isInteger(p.target)) {
