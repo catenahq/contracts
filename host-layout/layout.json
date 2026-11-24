@@ -57,7 +57,6 @@
     "extra_tiles": "/etc/catena/extra-tiles.yml",
     "default_apps": "/etc/catena/default-apps.json",
     "backup_retention_env": "/etc/catena/backup-retention.env",
-    "backup_sqlite": "/etc/catena/backup-sqlite",
     "backup_paths": "/etc/catena/backup-paths",
     "backup_exclude_patterns": "/etc/catena/backup-exclude-patterns",
     "backup_coverage_paths": "/etc/catena/backup-coverage.paths",

@@ -25,10 +25,6 @@
         "agent-data": "catena-beszel_agent-data",
         "relay-state": "catena-beszel_relay-state"
       },
-      "sqlite": [
-        { "volume": "beszel-hub-data", "file": "data.db" },
-        { "volume": "beszel-hub-data", "file": "auxiliary.db" }
-      ],
       "env_core_writes": [
         "APP_URL",
         "USER_CREATION",
