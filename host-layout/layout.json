@@ -64,7 +64,7 @@
     "restic_pass": "/etc/catena/restic.pass",
     "payload_image": "/etc/catena/.payload-image",
     "heartbeat_env": "/etc/catena/heartbeat.env",
-    "gatus_sync_env": "/etc/catena/gatus-sync.env",
+    "uptime_targets": "/etc/catena/uptime-targets.json",
     "dashboard_sync_env": "/etc/catena/dashboard-sync.env",
     "version_check_overrides": "/etc/catena/version-check-overrides.json",
     "recovery_readme_en": "/etc/catena/RECOVERY-README.en.md",

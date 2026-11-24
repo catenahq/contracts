@@ -1,6 +1,6 @@
 # default-apps
 
-The wiring of the apps Catena installs by default (Gatus, Beszel): one file that catena-ce, catena-admin,
+The wiring of the apps Catena installs by default (Beszel): one file that catena-ce, catena-admin,
 catena-templates and ops read, so the stack names, networks, ports, volumes and capabilities agree everywhere.
 
 ## Files
@@ -17,7 +17,8 @@ Top level:
 - `reserved_capabilities`: capability -> `{provider, readers}`. `provider` is the app id that provides it, `readers` the
   app ids that may read it.
 - `alert_intake_sources`: intake source -> the app id whose block may read that source's token, the stored secret
-  `alert_intake_token_<source>` (`status` is read by Gatus, `resources` by Beszel). The read token is read by no app.
+  `alert_intake_token_<source>` (`resources` is read by Beszel; the `status` token is core's: catena-admin's uptime check posts with it, and no app
+  reads it). The read token is read by no app.
 - `apps`: app id -> the entry below.
 
 An app entry:
@@ -28,7 +29,6 @@ An app entry:
 | `services` | Service name -> `networks` (network -> aliases), `ports` (`published`, `target`), `host_network`, `docker_socket`. |
 | `volumes` | Volume key (as the app's compose names it) -> volume name `<stack>_<key>`. |
 | `sqlite` | SQLite files to back up: `volume` (a key of `volumes`) and `file`. |
-| `config_volume` | The volume key holding configuration other components write into (Gatus). |
 | `env_core_writes` | Keys catena-ce writes into the app's `.env` with `setenv`; the app's block never declares them. |
 | `env_declared` | Every key the block declares: settings, managed and generated. Core writes none of them. |
 | `secrets` | Store secrets the block lists. |

@@ -86,7 +86,6 @@
             }
           }
         },
-        "config_volume": { "type": "string" },
         "env_core_writes": { "$ref": "#/$defs/strings" },
         "env_declared": { "$ref": "#/$defs/strings" },
         "secrets": { "$ref": "#/$defs/strings" },
